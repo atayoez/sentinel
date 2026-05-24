@@ -56,7 +56,18 @@ pub fn check_agent_bypass(pamh: &PamHandle) -> Option<PamResultCode> {
             return None;
         }
     };
-    let path = sentinel_shared::bypass_socket_path(uid);
+    // Use the RESOLVED user's runtime dir explicitly. Do NOT use
+    // sentinel_shared::bypass_socket_path() here: it prefers
+    // $XDG_RUNTIME_DIR, but inside socket-activated polkit-agent-helper-1
+    // (which runs as root) that's root's runtime dir — so we'd look at
+    // /run/user/0 instead of the requesting user's /run/user/<uid>, and
+    // never reach the agent's socket.
+    let path = std::path::PathBuf::from(format!("/run/user/{uid}"))
+        .join(sentinel_shared::BYPASS_SOCKET_BASENAME);
+    log::debug!(
+        "agent_bypass: PAM_USER={user} uid={uid} socket={}",
+        path.display()
+    );
 
     let mut stream = match UnixStream::connect(&path) {
         Ok(s) => s,
