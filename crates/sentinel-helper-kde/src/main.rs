@@ -49,6 +49,23 @@ fn main() {
         unsafe { std::env::set_var("QT_WAYLAND_SHELL_INTEGRATION", "layer-shell") };
     }
 
+    // SAFETY: still single-threaded, before Qt init. Two quality-of-life
+    // env tweaks for the spawned-helper context:
+    //  - Mute KDE's icon-theme chatter ("Icon theme \"X\" not found"): the
+    //    user's theme isn't on the helper's search path, but Kirigami.Icon
+    //    falls back fine — the warning is just noise on the caller's stderr.
+    //  - Render on the GUI thread (`basic`): we exit the process directly
+    //    after the verdict, which otherwise tears down the scene-graph render
+    //    thread mid-flight and spews "QThreadStorage destroyed" warnings.
+    unsafe {
+        if std::env::var_os("QT_LOGGING_RULES").is_none() {
+            std::env::set_var("QT_LOGGING_RULES", "kf.iconthemes.warning=false");
+        }
+        if std::env::var_os("QSG_RENDER_LOOP").is_none() {
+            std::env::set_var("QSG_RENDER_LOOP", "basic");
+        }
+    }
+
     let mut app = QApplication::new();
 
     // Native Breeze styling for QtQuick.Controls. qqc2-desktop-style needs
@@ -141,23 +158,27 @@ fn resolve_sound_file(name: &str) -> Option<String> {
     None
 }
 
-/// Spawn a detached, silenced child and reap it asynchronously so it never
-/// lingers as a zombie. Returns false if the binary isn't on PATH, so the
-/// caller can fall through to the next player.
+/// Spawn a silenced audio player **detached** so the cue keeps playing after
+/// the dialog exits (the user often clicks Allow before the sound finishes):
+/// its own process group, so the caller's terminal/session tearing down can't
+/// take it with it. On our exit it's reparented to init, which reaps it — no
+/// wait-thread needed (which also kept a live thread around at process::exit).
+/// Tries an absolute path first because the helper is spawned with a minimal
+/// PATH; returns false if the binary isn't found so the caller tries the next.
 fn spawn_detached(bin: &str, args: &[&str]) -> bool {
-    match std::process::Command::new(bin)
-        .args(args)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(mut child) => {
-            std::thread::spawn(move || {
-                let _ = child.wait();
-            });
-            true
+    use std::os::unix::process::CommandExt;
+    for prog in [format!("/usr/bin/{bin}"), bin.to_string()] {
+        let spawned = std::process::Command::new(&prog)
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .process_group(0) // own group → survives the dialog's exit + terminal
+            .spawn()
+            .is_ok();
+        if spawned {
+            return true;
         }
-        Err(_) => false,
     }
+    false
 }
