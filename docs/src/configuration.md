@@ -103,15 +103,10 @@ enabled = false
 
 ## Localization
 
-The helper's UI chrome (button labels, "Show details" toggle, "Auto-deny
-in Ns") is translated into 12 locales: en-US, de-DE, es-ES, fr-FR,
-it-IT, ja-JP, nl-NL, pl-PL, pt-BR, ru-RU, tr-TR, zh-CN.
+The `title`, `message`, and `secondary` strings are admin-supplied via this
+config file and rendered **verbatim** — so you can write them in whatever
+language you like.
 
-The dialog message/title/secondary are admin-supplied via this config
-file — they're rendered verbatim as you write them. If you leave the
-defaults (`title`, `message`), the helper substitutes the locale's
-own translation; once you customise them, your text wins.
-
-Locale resolution: `LC_ALL` → `LC_MESSAGES` → `LANG`, with the helper
-canonicalising to BCP-47 (`tr_TR.UTF-8` → `tr-TR`) and falling back to
-`en-US` for unknown values.
+The helper's built-in UI chrome (the "Show details" toggle, "Auto-deny in N s",
+the Allow/Deny labels) is currently English-only. KDE-native translation
+(`KLocalizedString`) is a planned follow-up.

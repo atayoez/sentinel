@@ -3,23 +3,27 @@
 ## Toolchain
 
 - Rust **1.85+** (workspace MSRV pinned in `rust-toolchain.toml`).
-- Linux build deps: `libpam0g-dev`, `libxkbcommon-dev`,
-  `libwayland-dev`, `libfontconfig1-dev`, `libfreetype6-dev`,
-  `pkg-config`. (Arch: `pam wayland libxkbcommon fontconfig
-  freetype2 mesa vulkan-icd-loader`.)
+- `pam-devel` and **Qt 6 + KDE Frameworks 6 development packages** — the
+  helper builds against them via cxx-qt. On openSUSE Tumbleweed:
+  ```bash
+  sudo zypper install rustup pam-devel qt6-base-devel qt6-declarative-devel \
+      kf6-kirigami-devel
+  ```
+  (Plus the KF6 runtime — Kirigami, qqc2-desktop-style, LayerShellQt — already
+  present on Plasma.) On aarch64 the bundled `.cargo/config.toml` pins `ld.bfd`.
 
 ## Building
 
 ```bash
-git clone https://github.com/atayozcan/sentinel
-cd sentinel
+git clone https://github.com/atayozcan/sentinel-kde
+cd sentinel-kde
 cargo build --release --workspace --locked
 ```
 
 This produces:
 
-- `target/release/libpam_sentinel.so` — the cdylib
-- `target/release/sentinel-helper` — the GUI binary
+- `target/release/libpam_sentinel.so` — the PAM cdylib
+- `target/release/sentinel-helper-kde` — the Kirigami dialog
 - `target/release/sentinel-polkit-agent` — the polkit agent
 
 ## Running tests
@@ -75,8 +79,8 @@ clobbering of your real config).
 Produces `dist/`:
 - `sentinel-kde-0.8.0.tar.gz` (source)
 - `sentinel-kde-0.8.0-x86_64-linux.tar.gz` (binary installer bundle —
-  prebuilt binaries + `install.sh`; on the target run
-  `sudo SENTINEL_SKIP_BUILD=1 ./install.sh`)
+  prebuilt binaries + `install.sh`; on the target just run `sudo ./install.sh`,
+  which reuses the bundled binaries)
 - per-arch `.sha256` files
 
 For an openSUSE/Fedora RPM of the helper:
@@ -86,11 +90,10 @@ cargo generate-rpm -p crates/sentinel-helper-kde
 
 ## Shell completions and man pages
 
-The two binaries auto-generate completions and man pages:
+The agent generates its own completions and man page (the installer does this
+for you):
 
 ```bash
-sentinel-helper completions bash > /etc/bash_completion.d/sentinel-helper
-sentinel-helper man > /usr/share/man/man1/sentinel-helper.1
+sentinel-polkit-agent completions bash > /usr/share/bash-completion/completions/sentinel-polkit-agent
+sentinel-polkit-agent man > /usr/share/man/man1/sentinel-polkit-agent.1
 ```
-
-The release tarballs and packages ship these pre-rendered.

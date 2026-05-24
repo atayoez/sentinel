@@ -1,6 +1,6 @@
 [book]
-title = "Sentinel"
-description = "UAC-style PAM + polkit confirmation dialog for Linux"
+title = "Sentinel-KDE"
+description = "UAC-style PAM + polkit confirmation dialog for KDE Plasma"
 authors = ["Atay Özcan"]
 language = "en"
 src = "src"
@@ -8,10 +8,10 @@ src = "src"
 [output.html]
 default-theme = "navy"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/atayozcan/sentinel"
+git-repository-url = "https://github.com/atayozcan/sentinel-kde"
 git-repository-icon = "fa-github"
-edit-url-template = "https://github.com/atayozcan/sentinel/edit/main/docs/{path}"
-site-url = "/sentinel/"
+edit-url-template = "https://github.com/atayozcan/sentinel-kde/edit/main/docs/{path}"
+site-url = "/sentinel-kde/"
 no-section-label = false
 
 [output.html.search]

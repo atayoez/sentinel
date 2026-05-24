@@ -1,149 +1,162 @@
 # Architecture
 
-Sentinel is three binaries plus one shared crate, in a single Cargo
-workspace.
+Sentinel is three binaries plus one shared crate, in a single Cargo workspace.
 
 ```
 crates/
-├── sentinel-shared/        # config schema, /proc + logind readers,
-│                           # Outcome wire enum, log_kv helpers,
-│                           # POLKIT_PAM_SERVICE const, audit::init_syslog
-├── pam-sentinel/           # cdylib → /usr/lib/security/pam_sentinel.so
-├── sentinel-helper/        # bin → /usr/lib/sentinel-helper (libcosmic dialog)
-└── sentinel-polkit-agent/  # bin → /usr/lib/sentinel-polkit-agent
+├── sentinel-shared/        # config schema, /proc + logind readers, Outcome wire
+│                           # enum, log_kv helpers, D-Bus name/path constants,
+│                           # POLKIT_PAM_SERVICE, audit::init_syslog
+├── pam-sentinel/           # cdylib → pam_sentinel.so   (the D-Bus bypass client)
+├── sentinel-polkit-agent/  # bin → the polkit agent + the org.sentinel.Agent service
+└── sentinel-helper-kde/    # bin → the Kirigami/Breeze dialog (Rust + cxx-qt)
 ```
+
+The PAM module installs to the distro's PAM module dir — `/usr/lib64/security`
+on openSUSE/Fedora (multilib), detected at install time from `pam_unix.so`.
 
 ## The PAM module — `pam_sentinel.so`
 
-Loaded by libpam on every authentication attempt for whatever
-services have it wired in. For each call it picks one of:
+Loaded by libpam on every authentication attempt for whatever services have it
+wired in. For each call it picks one of:
 
-- **Bypass:** the polkit agent has already pre-approved this auth
-  via the local socket. Return `PAM_SUCCESS` immediately.
-- **Dialog:** spawn `sentinel-helper`, wait for Allow / Deny / timeout.
-  Return `PAM_SUCCESS` on Allow, `PAM_AUTH_ERR` otherwise.
-- **Headless:** no Wayland display detected. Return whatever
+- **Bypass:** the agent has already pre-approved this auth. `pam_sentinel`
+  asks the agent over the **system D-Bus** and, on success, returns
+  `PAM_SUCCESS` immediately (no password). See *The bypass* below.
+- **Headless:** no Wayland display for the requesting user → return whatever
   `headless_action` says (default `PAM_IGNORE` → password prompt).
-- **Disabled:** `enabled = false` in config → `PAM_IGNORE`.
+- **Disabled:** `enabled = false` in config for this service → `PAM_IGNORE`.
+- Otherwise it falls through to the rest of the PAM stack (the password).
 
-Identifying the requesting user uses `/proc/<ppid>/loginuid` (set by
-PAM at login, inherited through forks, immune to setuid). Falls back
-to `/proc/<ppid>/status` `Uid:` line, then `getuid()`.
+> The agent owns the dialog. `pam_sentinel` itself doesn't spawn the GUI in
+> the polkit path — it only consults the agent's pre-approval. (The module
+> retains a direct-dialog path for non-agent PAM services.)
 
-The displayed process name uses `/proc/<pid>/cmdline` of the
-privileged binary (sudo, pkexec, helper-1) and strips the elevation
-wrapper via `sentinel_shared::strip_elevation_prefix`. For wrappers
-with no target argv (`sudo -v` for cred-cache), it walks `PPid` to
-the calling process so the dialog shows the user-facing originator
-(`paru`, `topgrade`) rather than `sudo-rs`.
+Identifying the requesting user uses `/proc/<ppid>/loginuid` (set by PAM at
+login, inherited through forks, immune to setuid), falling back to
+`/proc/<ppid>/status` `Uid:`, then `getuid()`. In the polkit-helper path the
+authoritative answer is `PAM_USER`.
 
 ## The polkit agent — `sentinel-polkit-agent`
 
 A per-user agent that registers with polkitd as the session's
-`org.freedesktop.PolicyKit1.AuthenticationAgent`. Forks
-`sentinel-helper` for the dialog, then satisfies polkit's cookie
-validation via `polkit-agent-helper-1` over its socket.
+`org.freedesktop.PolicyKit1.AuthenticationAgent`. On `BeginAuthentication` it
+shows the dialog (via `sentinel-helper-kde`), and on **Allow** queues a
+one-shot approval, then drives `polkit-agent-helper-1` to satisfy polkit's
+cookie validation — which runs the polkit-1 PAM stack, where `pam_sentinel.so`
+consumes the approval.
 
-### Bypass socket
+### Runs as a systemd *user* service
 
-`$XDG_RUNTIME_DIR/sentinel-agent.sock` (mode `0600`, owned by the
-user). When the agent's own helper-1 invocation runs, the
-`pam_sentinel.so` inside it connects here, gets a one-shot
-"OK" / "NO" response, and short-circuits to `PAM_SUCCESS` without
-spawning a second dialog.
+On Plasma 6 the agent **must** be a `systemd --user` service
+(`packaging/systemd/user/sentinel-polkit-agent.service`,
+`PartOf=graphical-session.target`) to register cleanly with polkitd. A
+hand-spawned / XDG-autostart agent fails polkit's session-equality check. The
+installer masks `plasma-polkit-agent.service` so Sentinel is the sole agent.
 
-Per-connection check:
-1. `SO_PEERCRED` — peer uid must be 0 (helper-1 runs as root).
-2. `/proc/<peer-pid>/comm` must equal `polkit-agent-helper-1` or
-   its kernel-truncated form `polkit-agent-he` (TASK_COMM_LEN = 16).
+### The bypass — over the system D-Bus
 
-Approvals are one-shot, expire after 1 second, and `cancel-authentication`
-drains the queue so a stale approval can't be picked up by a
-racing auth.
+On **Allow** the agent claims `org.sentinel.Agent` on the **system bus** and
+serves a single method, `TakeApproval`, which pops one non-expired approval
+from an in-memory queue (one-shot, 1 s TTL; `CancelAuthentication` drains it so
+a stale approval can't be claimed by a racing auth).
+
+`pam_sentinel.so` (running as root inside `polkit-agent-helper-1`):
+
+1. Resolves the uid being authenticated (`PAM_USER`).
+2. Verifies `org.sentinel.Agent`'s **owner uid == that uid** via
+   `GetConnectionUnixUser` — so a same-name squatter from another uid can't
+   forge an approval.
+3. Calls `TakeApproval`; on `true`, returns `PAM_SUCCESS`.
+
+The D-Bus policy (`packaging/dbus/org.sentinel.Agent.conf`) lets any user own
+the name but restricts the method to **root** callers, so a non-root process
+can't drain the queue.
+
+#### Why D-Bus instead of a unix socket
+
+polkit 121+ forks `polkit-agent-helper-1` from polkitd, so on SELinux systems
+(openSUSE Tumbleweed) the helper runs as `policykit_t`. SELinux **denies**
+`policykit_t` writing an arbitrary `var_run_t` socket (`sesearch` confirms it
+has no `sock_file write`), which defeats *any* `/run` socket — but it
+**already allows** `policykit_t userdomain:dbus send_msg` (the polkit agent
+protocol itself, and exactly how `pam_fprintd` does passwordless auth). So the
+D-Bus channel rides existing MAC policy: it works under **enforcing SELinux**
+with no custom policy module and no `polkit.service` sandbox override.
 
 ### Identity selection
 
-`unix-user` identities are preferred over groups; the matching uid
-wins over alternatives; first non-root unix-user is the fallback.
-See `crates/sentinel-polkit-agent/src/identity.rs`.
+`unix-user` identities are preferred over groups; the uid matching the agent's
+own uid wins; the first non-root `unix-user` is the fallback. The installer's
+polkit admin rule (`/etc/polkit-1/rules.d/49-sentinel-admin.rules`) makes the
+logged-in user a polkit administrator so `auth_admin` actions authenticate the
+user (`PAM_USER` = the user), not root. See
+`crates/sentinel-polkit-agent/src/identity.rs`.
 
-### Why XDG autostart, not systemd-user
+## The helper — `sentinel-helper-kde`
 
-The agent must inherit the kernel sessionid of the user's compositor.
-A `systemd --user` unit would run under `user@<uid>.service` (a
-DIFFERENT sessionid), and polkit's `RegisterAuthenticationAgent`
-rejects the mismatch with "Passed session and the session the caller
-is in differs". Sentinel's autostart entry sets
-`X-systemd-skip=true` so the systemd xdg-autostart-generator doesn't
-wrap it.
+A Qt/QML (cxx-qt + Kirigami + Breeze) binary that paints the dialog. Per spawn:
 
-## The helper — `sentinel-helper`
+- Plays the freedesktop sound cue, detached so it survives the dialog's exit —
+  `canberra-gtk-play` first, then `pw-play`/`paplay`/`ffplay`/`aplay`.
+- Renders the card as a `zwlr-layer-shell-v1` overlay (KWin) via the installed
+  `org.kde.layershell` QML plugin, with an xdg-toplevel (`--windowed`)
+  fallback. QML is embedded in the binary as a **qrc** (tamper-proof).
+- Emits `ALLOW` / `DENY` / `TIMEOUT` on stdout and exits 0 / 1.
 
-A libcosmic GUI binary that paints the dialog. Per-spawn:
+Hardening: every controller-supplied string forces `Text.PlainText` (the
+requesting process's exe/cmdline/cwd are attacker-influenceable; AutoText would
+render injected markup), `/proc` fields are length-clipped, and Allow is
+disabled for `min_display_time_ms` to block instant scripted clicks.
 
-- Initializes the global Fluent translation bundle from `LANG` /
-  `LC_*` (locales embedded at compile time).
-- Plays the freedesktop sound cue via `canberra-gtk-play` (silent
-  fallback if not installed).
-- Decides layer-shell vs xdg-toplevel rendering (auto-falls-back to
-  xdg-toplevel on Mutter-based desktops).
-- Renders the card; emits `ALLOW` / `DENY` / `TIMEOUT` on stdout
-  and exits with the matching code.
+## PAM wiring — prepend-in-place
 
-Keyboard accessibility:
-- Tab / Shift+Tab — cycle Allow / Deny (iced default).
-- Enter / Space — activate focused button.
-- Escape — always denies (intercepted regardless of focus).
-- Allow button is disabled for `min_display_time_ms` after the
-  dialog appears, blocking instant scripted clicks.
+The installer doesn't replace PAM files. For each guarded service (`polkit-1`,
+and by default `sudo`/`sudo-i`/`su`) it copies the distro's existing stack —
+from `/etc/pam.d` if present, else the vendor `/usr/lib/pam.d` — and inserts
+`auth sufficient pam_sentinel.so` just before the first `auth … include`. This:
+
+- keeps the distro's real password fallback (openSUSE uses `common-auth`, not
+  the nonexistent `system-auth`);
+- preserves leading lines like `su`'s `pam_rootok.so` (root still skips);
+- makes uninstall trivial where `/etc` shadows the vendor file (delete our copy
+  and the vendor stack returns).
 
 ## Wire formats
 
 ### Helper → caller
 
-The helper writes one of `ALLOW\n`, `DENY\n`, `TIMEOUT\n` to stdout
-and exits with `0` (Allow) or `1` (Deny / Timeout). The
-`sentinel_shared::Outcome` enum is the single source of truth for
-the parser.
+`ALLOW\n` / `DENY\n` / `TIMEOUT\n` on stdout, exit `0` (Allow) or `1`
+(Deny/Timeout). `sentinel_shared::Outcome` is the single source of truth.
+
+### Bypass — D-Bus
+
+```
+org.sentinel.Agent  (system bus)
+  /org/sentinel/Agent
+  org.sentinel.Agent.TakeApproval() -> b   # true = pre-approved (consume it)
+```
+Caller is restricted to root by the bus policy; `pam_sentinel` verifies the
+name owner's uid before trusting the reply.
 
 ### Audit log
 
-Lines emitted under syslog identifier `pam_sentinel` or
-`sentinel-polkit-agent`, AUTH facility:
+logfmt under syslog identifiers `pam_sentinel` / `sentinel-polkit-agent`, AUTH
+facility:
 
 ```
-event=auth.allow source=dialog user=alice service=sudo process=pacman uid=1000 latency_ms=2891 session_type=wayland session_class=user session_remote=0
-event=auth.allow source=bypass uid=1000
-event=auth.deny  source=dialog user=alice service=sudo process=true uid=1000 latency_ms=12440 …
-event=auth.timeout source=agent user=alice action=org.freedesktop.policykit.exec process=pacman …
+event=auth.allow source=agent user=alice action=org.freedesktop.policykit.exec process=pkexec latency_ms=2891 …
+event=auth.allow source=agent.bypass action=org.freedesktop.policykit.exec
+event=auth.deny  source=agent user=alice action=… process=true latency_ms=12440 …
 event=auth.headless reason=no-wayland user=alice service=sudo …
 ```
 
-Format is logfmt (whitespace-separated `key=value`, values quoted
-when necessary). Designed for `journalctl -t pam_sentinel
---output=cat | grep event=auth.deny` to be the SRE-friendly query.
-
-### Bypass socket
-
-ASCII protocol, length-bounded:
-
-```
-client → server: ?\n
-server → client: OK\n     (approval popped, fast-path the auth)
-                  or
-                 NO\n     (no approval; client falls through to dialog)
-```
-
-## Compatibility matrix
-
-See [README#Compatibility](https://github.com/atayozcan/sentinel#compatibility).
-The agent's autostart entry uses `NotShowIn=` to exclude desktops
-with built-in polkit agents (GNOME, KDE, XFCE, LXDE, Cinnamon, MATE,
-LXQt, Pantheon, Budgie) and lets every other compositor pick it up
-automatically.
+`journalctl -t sentinel-polkit-agent --output=cat | grep event=auth` is the
+SRE-friendly query. (Note: inside `polkit-agent-helper-1` the helper's sandbox
+masks `/dev/log`, so `pam_sentinel`'s own bypass line may not appear there —
+the agent's `source=agent.bypass` line is the authoritative record.)
 
 ## Threat model
 
-See [Security policy](./security.md) for the explicit trust
-boundaries — what the PAM module trusts vs. doesn't, what the agent
-will refuse, supply-chain integrity via Sigstore attestations.
+See [Security policy](./security.md) for the explicit trust boundaries — what
+the PAM module trusts, what the agent refuses, and the SELinux posture.

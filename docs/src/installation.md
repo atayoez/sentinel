@@ -1,121 +1,86 @@
 # Installation
 
-Sentinel ships through several channels. AUR is first-class (Arch +
-sudo-rs are the primary target); deb / rpm prebuilts cover Debian,
-Ubuntu, Fedora, openSUSE; NixOS users get a flake; everyone else
-either installs the binary tarball or builds from source.
+Sentinel-KDE targets **openSUSE Tumbleweed + KDE Plasma 6 (Wayland)**. The
+primary install path is the source installer (`install.sh`); a prebuilt binary
+bundle and a helper-only RPM are also available.
 
-> **Before you install:** Sentinel sits in the PAM auth path. Open a
-> second root shell first (`pkexec bash`) and keep it open until
-> you've confirmed `sudo` and `pkexec` still work. The
-> [Troubleshooting](./troubleshooting.md) page covers recovery.
+> **Before you install:** Sentinel sits in the PAM auth path. Open a second
+> root shell first (`sudo -i`) and keep it open until you've confirmed `sudo`
+> and `pkexec` still work. Sentinel wires in *prepend-in-place* so a broken
+> module always falls through to a password, but keep the rescue shell anyway.
+> The [Troubleshooting](./troubleshooting.md) page covers recovery.
 
-## Arch Linux (AUR)
-
-Two packages: `sentinel` (stable releases) and `sentinel-git` (main
-branch HEAD).
+## From source (recommended)
 
 ```bash
-yay -S sentinel
-# or
-paru -S sentinel-git
-```
+sudo zypper install rustup pam-devel
+rustup default 1.85
 
-Both `backup=` `/etc/security/sentinel.conf` and `/etc/pam.d/polkit-1`
-so a `pacman -Rsn sentinel` won't clobber your customisations.
-
-## Debian / Ubuntu
-
-```bash
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel_0.8.0-1_amd64.deb
-sudo apt install ./sentinel_0.8.0-1_amd64.deb
-
-# aarch64 (Pi 4/5, Ampere, etc.):
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel_0.8.0-1_arm64.deb
-sudo apt install ./sentinel_0.8.0-1_arm64.deb
-```
-
-After install, the polkit agent autostarts on next graphical login.
-Wire `pam_sentinel.so` into `/etc/pam.d/sudo` manually if you want
-sudo coverage — see [PAM wiring](./pam-wiring.md).
-
-## Fedora / openSUSE
-
-```bash
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel-0.8.0-1.x86_64.rpm
-sudo dnf install ./sentinel-0.8.0-1.x86_64.rpm
-```
-
-## NixOS
-
-The repo's `flake.nix` exposes a NixOS module:
-
-```nix
-{
-  inputs.sentinel.url = "github:atayozcan/sentinel";
-
-  outputs = { self, nixpkgs, sentinel, ... }: {
-    nixosConfigurations.<host> = nixpkgs.lib.nixosSystem {
-      modules = [
-        sentinel.nixosModules.default
-        ({ ... }: {
-          services.sentinel.enable = true;
-          services.sentinel.enableForSudo = false;  # opt-in
-        })
-      ];
-    };
-  };
-}
-```
-
-Or run the helper ad-hoc without installing:
-
-```bash
-nix run github:atayozcan/sentinel -- --timeout 10 --randomize
-```
-
-## Generic binary tarball
-
-```bash
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel-0.8.0-x86_64-linux.tar.gz
-tar xzf sentinel-0.8.0-x86_64-linux.tar.gz
-cd sentinel-0.8.0
+git clone https://github.com/atayozcan/sentinel-kde
+cd sentinel-kde
 sudo ./install.sh
 ```
 
-## Source
+Flags:
+
+| Flag | Effect |
+|------|--------|
+| *(none)* | Guards polkit **and** `sudo`/`sudo-i`/`su`; reuses prebuilt `target/release` if present, else builds. |
+| `--no-sudo` | Guard polkit only; leave `sudo`/`su` as plain password prompts. |
+| `--rebuild` | Force a `cargo build` even if `target/release` artifacts exist. |
+| `-v` | Verbose (print the installed-file summary). |
+
+Verify:
 
 ```bash
-git clone https://github.com/atayozcan/sentinel
-cd sentinel
-pkexec ./install.sh
+pkexec true     # one Sentinel dialog; Allow → no password, exit 0
 ```
 
-The installer:
-1. Builds the workspace as the invoking user (cargo target/ stays
-   user-owned).
-2. Records every replaced file's pre-install state in
-   `/var/lib/sentinel/install.state`.
-3. Verifies modes/owners on every installed file.
-4. Restarts the polkit agent in-place so changes take effect
-   without log-out.
+## Prebuilt binary bundle
 
-`pkexec ./uninstall.sh` rolls everything back to the recorded
-pre-install state.
-
-The `--enable-sudo` flag opts into wiring `pam_sentinel.so` into
-`/etc/pam.d/sudo` (default: off — see [PAM wiring](./pam-wiring.md)
-for why).
-
-## Verifying release artifacts
-
-Every artifact is signed by Sigstore via GitHub's artifact
-attestations:
+`scripts/build-release.sh` produces `dist/sentinel-kde-<ver>-<arch>-linux.tar.gz`
+— the prebuilt binaries plus `install.sh`. On the target machine:
 
 ```bash
-gh attestation verify sentinel_0.8.0-1_amd64.deb \
-    --repo atayozcan/sentinel
+tar xzf sentinel-kde-<ver>-<arch>-linux.tar.gz
+cd sentinel-kde-<ver>
+sudo ./install.sh        # reuses the bundled binaries (no toolchain needed)
 ```
 
-The signature binds the file's sha256 to the release.yml workflow
-run that produced it.
+## RPM (helper only)
+
+```bash
+cargo generate-rpm -p crates/sentinel-helper-kde
+sudo zypper install ./target/generate-rpm/sentinel-helper-kde-*.rpm
+```
+
+The RPM installs **only** `sentinel-helper-kde` (the dialog) plus its Qt/KDE
+runtime dependencies. The PAM/polkit/systemd wiring is done by `install.sh`;
+the RPM does not wire the auth path.
+
+## What the installer does
+
+1. Reverts any previous Sentinel install first (safe reinstall / repair).
+2. Reuses prebuilt `target/release` artifacts if present, otherwise builds the
+   workspace **as the invoking user** (the `cargo target/` stays user-owned).
+3. Installs `pam_sentinel.so` into the distro PAM module dir
+   (`/usr/lib64/security`, auto-detected), the agent, and the helper.
+4. Prepends `pam_sentinel.so` into the polkit-1 (and, by default,
+   `sudo`/`sudo-i`/`su`) PAM stacks — *in place*, preserving the distro's own
+   stack (see [PAM wiring](./pam-wiring.md)).
+5. Installs the systemd **user** service + the `org.sentinel.Agent` D-Bus
+   policy, masks `plasma-polkit-agent.service`, and adds the polkit admin rule.
+6. Records every change in `/var/lib/sentinel/install.state`; verifies
+   modes/owners; rolls back automatically on any error.
+7. Activates the agent (systemd `--user`) so it takes effect without logout.
+
+## Uninstall
+
+```bash
+sudo ./uninstall.sh
+```
+
+Replays `/var/lib/sentinel/install.state` in reverse: disables the agent,
+unmasks and restarts `plasma-polkit-agent.service`, removes installed files,
+restores any backed-up originals, and reloads the bus. Idempotent, with a
+best-effort path-based fallback if the state file is missing.

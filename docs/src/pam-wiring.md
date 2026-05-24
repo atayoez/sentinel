@@ -1,109 +1,96 @@
 # PAM wiring
 
-Sentinel needs to be referenced from the PAM stacks of whichever
-services should trigger the confirmation dialog. The packages wire
-`/etc/pam.d/polkit-1` automatically; everything else is opt-in.
+Sentinel is referenced from the PAM stacks of the services that should trigger
+the confirmation dialog. By default the installer wires **polkit-1** and
+**`sudo` / `sudo-i` / `su`**; pass `--no-sudo` to wire polkit only.
 
-> **Always test on a fresh install with a second root shell open.** A
-> typo in a PAM file can lock you out of `sudo`. `pkexec bash` keeps
-> a working privileged shell available even if the rest of the stack
-> breaks.
+> **Always test on a fresh install with a second root shell open.** Sentinel
+> wires in *prepend-in-place* so a mistake still falls through to a password,
+> but `sudo -i` keeps a working privileged shell available regardless.
 
-## polkit (default)
+## Prepend-in-place, not replace
 
-`/etc/pam.d/polkit-1` is owned by Sentinel after a package install:
+The installer does **not** overwrite your PAM files. For each guarded service
+it copies the distro's existing stack — from `/etc/pam.d/<svc>` if present,
+otherwise the vendor file under `/usr/lib/pam.d/<svc>` (openSUSE keeps the
+shipped files there and lets `/etc/pam.d` shadow them) — and inserts a single
+line just before the first `auth … include`:
 
 ```
 #%PAM-1.0
-auth       sufficient pam_sentinel.so
-auth       include    system-auth
-account    include    system-auth
-password   include    system-auth
-session    include    system-auth
+auth       sufficient pam_sentinel.so   # ← added by Sentinel-KDE
+auth       include      common-auth     # ← your distro's real auth (the fallback)
+account    include      common-account
+password   include      common-password
+session    include      common-session
 ```
 
-The `sufficient` control means: if Sentinel returns `PAM_SUCCESS`
-(user clicked Allow), polkit skips the rest of the stack — no
-password needed. Any other return (Deny / timeout / no Wayland)
-falls through to `system-auth` which prompts for the password.
+Two things this buys you over replacing the file:
 
-## sudo (opt-in)
+- **The real password fallback is preserved.** openSUSE uses `common-auth`
+  (not the Fedora-style `system-auth`, which doesn't exist here). Because we
+  copy the distro's own stack, the fallback is always the correct one.
+- **Leading auth lines are kept.** `su`'s stack starts with
+  `auth sufficient pam_rootok.so`; Sentinel's line goes *after* it, so root
+  still `su`'s without any prompt.
 
-The package does **not** wire `/etc/pam.d/sudo` automatically — a
-mistake there can lock you out of root entirely.
+The `sufficient` control means: if Sentinel returns `PAM_SUCCESS` (you clicked
+Allow) the stack is satisfied with no password; any other result continues to
+`common-auth`, which prompts.
 
-To opt in via the source installer:
+## Guarding sudo / su (default on)
+
+By default `install.sh` guards `sudo`, `sudo -i`, and `su`. This makes them
+**click-to-allow** from a graphical session (no password) and falls back to the
+password on a TTY or whenever Sentinel is unavailable.
+
+If you'd rather keep `sudo`/`su` as plain password prompts and let Sentinel
+guard only polkit/`pkexec`:
 
 ```bash
-pkexec ./install.sh --enable-sudo
+sudo ./install.sh --no-sudo
 ```
 
-To do it manually:
-
-```
-# /etc/pam.d/sudo
-#%PAM-1.0
-auth       sufficient pam_sentinel.so
-auth       include    system-auth
-account    include    system-auth
-password   include    system-auth
-session    include    system-auth
-```
-
-A `sufficient` Sentinel followed by `system-auth` is the safest
-shape: any Sentinel failure (helper crash, missing display)
-produces `PAM_AUTH_ERR`, which makes the stack continue to the
-password prompt. You're never *prevented* from authenticating;
-Sentinel just adds a confirmation step on top.
-
-## sudo-rs
-
-`sudo-rs` reads the same `/etc/pam.d/sudo` stack as `sudo`. No
-separate wiring; the steps above cover both.
-
-## su
-
-A `[services.su] enabled = false` block in `sentinel.conf` is the
-recommended approach (Sentinel returns `PAM_IGNORE`, su falls
-through to password). If you want Sentinel to gate `su` too, mirror
-the sudo wiring into `/etc/pam.d/su`.
-
-## What to do if you locked yourself out
-
-The `pkexec bash` from your second root shell is the rescue hatch:
-
-```bash
-# In the rescue shell:
-pkexec ./uninstall.sh   # restores backed-up /etc/pam.d/* files
-```
-
-If both `pkexec` and `sudo` are broken (extremely rare; would
-require pam_sentinel.so to crash on every dlopen), boot to a TTY
-and edit `/etc/pam.d/{sudo,polkit-1}` by hand to remove the
-`pam_sentinel.so` line.
-
-The installer's transactional state file is at
-`/var/lib/sentinel/install.state`; every replaced file has a
-`.pre-sentinel.bak` copy alongside it. Worst-case manual recovery:
-
-```bash
-mv /etc/pam.d/sudo.pre-sentinel.bak /etc/pam.d/sudo
-mv /etc/pam.d/polkit-1.pre-sentinel.bak /etc/pam.d/polkit-1
-```
+`sudo-rs` reads the same `/etc/pam.d/sudo` stack, so it's covered identically.
 
 ## How `sufficient` interacts with the rest of the stack
 
-PAM's `sufficient` control is "if this passes, we're done; if it
-fails, keep going". That makes Sentinel a strict additive
-confirmation: never weakens auth, only ever ADDS a click.
+`sufficient` is "if this passes we're done; if it fails, keep going". Sentinel
+is therefore strictly additive — it never weakens auth, it only ever adds a
+click:
 
 | Sentinel returns | Stack behaviour |
 |------------------|-----------------|
 | `PAM_SUCCESS` (Allow) | Skip rest of `auth`, grant access. |
-| `PAM_AUTH_ERR` (Deny / timeout / crash) | Continue to next module → password prompt. |
-| `PAM_IGNORE` (disabled / headless / fallthrough) | Continue to next module → password prompt. |
+| `PAM_AUTH_ERR` (Deny / timeout) | Continue to next module → password prompt. |
+| `PAM_IGNORE` (disabled / headless / no agent) | Continue to next module → password prompt. |
 
-There's no configuration where Sentinel returning anything makes
-auth *easier* than the underlying password stack. Worst case it's
-neutral (you still type your password); best case (Allow) it's a
-single click instead of a password.
+There's no configuration where Sentinel makes auth *easier* than the
+underlying password stack. Worst case it's neutral (you still type your
+password); best case (Allow) it's a single click.
+
+## If something breaks
+
+Use the `sudo -i` rescue shell:
+
+```bash
+sudo ./uninstall.sh     # reverts every change from the install state file
+```
+
+Recovery details:
+
+- Where Sentinel **created** a shadow file (e.g. `/etc/pam.d/sudo` on openSUSE,
+  which previously only existed under `/usr/lib/pam.d`), uninstall simply
+  deletes it and the vendor stack takes over again.
+- Where Sentinel **replaced** an existing `/etc/pam.d/<svc>`, the original is
+  saved alongside as `<svc>.pre-sentinel.bak` and restored on uninstall.
+
+Worst case (manual recovery from a TTY): delete the `pam_sentinel.so` line from
+`/etc/pam.d/{polkit-1,sudo,sudo-i,su}`, or restore a backup:
+
+```bash
+mv /etc/pam.d/polkit-1.pre-sentinel.bak /etc/pam.d/polkit-1   # if a .bak exists
+rm  /etc/pam.d/sudo /etc/pam.d/su /etc/pam.d/sudo-i           # shadows → vendor stack returns
+```
+
+The transactional state file is `/var/lib/sentinel/install.state`.

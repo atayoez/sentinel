@@ -1,128 +1,109 @@
 # Troubleshooting
 
-## "I can't log in / `sudo` doesn't work" — recovery
+## "I can't `sudo` / `pkexec`" — recovery
 
-`pkexec ./uninstall.sh` from your second root shell undoes everything
-the installer did, restoring `.pre-sentinel.bak` files in place.
+From your second root shell (`sudo -i`):
 
-If both `sudo` and `pkexec` are broken:
-1. Boot to a TTY (Ctrl+Alt+F2 typically).
-2. Log in as root, or sudo into a recovery shell.
-3. Restore manually:
-   ```bash
-   mv /etc/pam.d/sudo.pre-sentinel.bak /etc/pam.d/sudo
-   mv /etc/pam.d/polkit-1.pre-sentinel.bak /etc/pam.d/polkit-1
-   rm /usr/lib/security/pam_sentinel.so
-   ```
+```bash
+./uninstall.sh     # reverts everything from /var/lib/sentinel/install.state
+```
+
+Because Sentinel wires in *prepend-in-place* (`auth sufficient` on top of the
+distro stack), a broken module already falls through to your password — a true
+lockout shouldn't happen. Worst case, from a TTY (Ctrl+Alt+F3) as root:
+
+```bash
+# remove the Sentinel line, or restore a backup if one exists:
+rm /etc/pam.d/sudo /etc/pam.d/su /etc/pam.d/sudo-i   # openSUSE: shadows → vendor stack returns
+mv /etc/pam.d/polkit-1.pre-sentinel.bak /etc/pam.d/polkit-1   # if a .bak exists
+rm /usr/lib64/security/pam_sentinel.so
+```
+
+## `pkexec`/`sudo` still asks for a password (the bypass isn't firing)
+
+Work down this list — most issues live here.
+
+**1. Is the agent registered and on the bus?**
+```bash
+systemctl --user is-active sentinel-polkit-agent.service
+journalctl --user -t sentinel-polkit-agent --since "5 min ago" --no-pager
+busctl --system status org.sentinel.Agent     # should show UnixUser = your uid
+```
+You should see `registered as polkit auth agent` shortly after login. If
+another agent won the race, make sure `plasma-polkit-agent.service` is masked
+(the installer does this):
+```bash
+systemctl --user mask --now plasma-polkit-agent.service
+systemctl --user restart sentinel-polkit-agent.service
+```
+
+**2. Did the bypass fire?** After clicking Allow:
+```bash
+journalctl --user -t sentinel-polkit-agent --since "1 min ago" | grep agent.bypass
+```
+- `event=auth.allow source=agent.bypass` → it worked.
+- `event=auth.error source=agent.helper1 …` → the PAM module didn't approve;
+  continue below.
+
+**3. SELinux.** Sentinel's bypass is designed to work under enforcing SELinux,
+but confirm it's the standard policy:
+```bash
+cat /sys/fs/selinux/enforce          # 1 = enforcing
+# quick sanity check (temporary!):
+sudo setenforce 0; pkexec true; sudo setenforce 1
+```
+If it works no-password only under `setenforce 0`, your SELinux policy is
+denying the D-Bus call — capture it with `sudo ausearch -m avc -ts recent` and
+file an issue. (The shipped design needs no custom policy on stock Tumbleweed.)
+
+**4. PAM module loaded?** It must be in the multilib dir:
+```bash
+ls -l /usr/lib64/security/pam_sentinel.so
+grep pam_sentinel /etc/pam.d/polkit-1
+```
 
 ## The dialog never appears
 
-**Check the agent is registered:**
+Check the agent is alive (above). If it's running but no dialog shows, the
+compositor may lack `zwlr-layer-shell-v1`; force the windowed fallback to test:
 ```bash
-pgrep -fxa /usr/lib/sentinel-polkit-agent
-journalctl -t sentinel-polkit-agent --since "5 minutes ago" --no-pager
+sentinel-helper-kde --windowed --title test --message hi
 ```
 
-You should see:
-```
-agent socket listening at /run/user/1000/sentinel-agent.sock
-registered as polkit auth agent (object path /com/github/sentinel/PolkitAgent)
-```
+## No sound
 
-**If "another agent is registered, retrying":** something else
-(cosmic-osd, polkit-gnome, polkit-kde) is winning the registration
-race. The install script tries to kill them; on COSMIC,
-`cosmic-session` will respawn `cosmic-osd` aggressively. Workaround:
-
+The cue tries `canberra-gtk-play` first, then `pw-play`/`paplay`/`ffplay`. For
+the theme-aware path, install canberra:
 ```bash
-pkexec chmod -x /usr/bin/cosmic-osd
+sudo zypper install canberra-gtk-play
 ```
+Otherwise the PipeWire fallback is used (present on any Plasma desktop). Check
+the configured cue in `/etc/security/sentinel.conf` (`[audio] sound_name`); set
+it to `""` to disable.
 
-(Loses brightness/volume OSDs but keeps Sentinel as the sole polkit
-agent.)
+## `pkexec` prints "Not authorized. This incident has been reported."
 
-**If the agent is running but the dialog still doesn't show:**
-likely the compositor doesn't implement `zwlr-layer-shell-v1`.
-Sentinel auto-falls-back to xdg-toplevel on GNOME/Mutter, but force
-it with:
+That's pkexec's standard message after a failed auth — **including a clean Deny
+click**. The "incident reported" line is hardcoded in pkexec(1); polkit's
+protocol doesn't distinguish "user declined" from "auth failed", so the agent
+can't suppress it.
 
+## More verbose logs
+
+The agent takes `--debug` (dumps `details[…]` from every
+`BeginAuthentication`):
 ```bash
-sentinel-helper --windowed --title test --message hi
+systemctl --user stop sentinel-polkit-agent.service
+/usr/lib/sentinel-polkit-agent --debug      # Ctrl-C when done, then:
+systemctl --user start sentinel-polkit-agent.service
 ```
-
-## `pkexec` shows "Error executing command as another user: Not authorized"
-
-That's pkexec's standard error after a failed auth — including a
-clean Deny click in Sentinel. The "incident has been reported" line
-is hardcoded in pkexec(1). Sentinel can't suppress it from the
-agent side; polkit doesn't differentiate "user politely declined"
-from "auth failed" in its protocol.
-
-## `sudo true` shows "sudo-rs" in the dialog instead of "true"
-
-Make sure you're on v0.6.1+ (this was fixed in that release). Earlier
-versions read `/proc/<sudo-pid>/exe` without stripping the elevation
-wrapper.
-
+All auth events from the last few minutes:
 ```bash
-sentinel-helper --version
-```
-
-## `sudo -v` (or topgrade / paru cred-cache) shows "sudo-rs" not the
-##  parent process
-
-Fixed in v0.7.0. When the elevation wrapper has no target argv
-(`sudo -v`), the PAM module walks up to PPid and uses the parent's
-exe.
-
-## Dialog appears but the wrong language
-
-Sentinel's helper reads `LC_ALL` → `LC_MESSAGES` → `LANG` to pick
-its embedded locale bundle. PAM modules typically run inside
-privileged binaries (sudo, helper-1) that scrub `LANG` from their
-env, so the helper recovers locale variables from
-`/proc/<requesting-pid>/environ` against a strict allowlist.
-
-Check the test:
-```bash
-LANG=tr_TR.UTF-8 pkexec true
-```
-
-Should render the Turkish dialog. If it doesn't:
-
-- Check `/proc/<your-shell-pid>/environ` actually has `LANG=...`
-- Check the locale tag is one of the 12 shipped: en-US, de-DE,
-  es-ES, fr-FR, it-IT, ja-JP, nl-NL, pl-PL, pt-BR, ru-RU, tr-TR,
-  zh-CN. Other tags fall back to en-US.
-
-## I want more verbose logs
-
-The agent supports `--debug`:
-
-```bash
-pkill -fx /usr/lib/sentinel-polkit-agent
-/usr/lib/sentinel-polkit-agent --debug &
-```
-
-The `--debug` mode dumps `details[…]` from every
-`BeginAuthentication` call — useful for diagnosing process-name
-display bugs.
-
-The PAM module always logs at INFO level under syslog identifier
-`pam_sentinel` (AUTH facility). Get all auth events from the last
-5 minutes:
-
-```bash
-journalctl -t pam_sentinel -t sentinel-polkit-agent \
-    --since "5 minutes ago" --no-pager | grep "event=auth"
+journalctl --user -t sentinel-polkit-agent --since "5 min ago" --no-pager | grep event=auth
 ```
 
 ## Reporting bugs
 
-[`bug_report.yml`](https://github.com/atayozcan/sentinel/issues/new?template=bug_report.yml)
-is the standard template. For compositor compatibility specifically,
-the [compositor compat template](https://github.com/atayozcan/sentinel/issues/new?template=compositor_compat.yml)
-feeds the README compatibility table directly.
-
-For security issues, use private vulnerability reporting — see
-[security policy](./security.md).
+Open an issue at <https://github.com/atayozcan/sentinel-kde/issues>. For
+security issues use private vulnerability reporting — see
+[Security policy](./security.md).
