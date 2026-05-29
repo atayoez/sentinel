@@ -152,8 +152,7 @@ jobs:
             dist/*
 
   # ---------------------------------------------------------------------------
-  # AUR publish — sentinel-kde (stable, tag tarball) + sentinel-kde-git
-  # (VCS, tracks main).
+  # AUR publish — sentinel-kde stable (release-tarball PKGBUILD).
   #
   # Gated on `release` succeeding so we don't publish to AUR when the
   # build or release upload failed.
@@ -165,31 +164,29 @@ jobs:
   #                          "SSH Public Key" field). Must be AUR-only;
   #                          do NOT reuse a personal key.
   #
-  # First-time bootstrap is manual — this action pushes to existing AUR
-  # repos, it doesn't create them. One-time:
+  # First-time bootstrap is manual — this action pushes to an existing AUR
+  # repo, it doesn't create it. One-time:
   #   git clone ssh://aur@aur.archlinux.org/sentinel-kde.git
-  #   git clone ssh://aur@aur.archlinux.org/sentinel-kde-git.git
+  #
+  # The companion `-git` AUR package was dropped: KSXGitHub's deploy-aur
+  # runs `updpkgsums`, which `makepkg --geninteg`'s `source=("…::git+…")`
+  # path turns into a real git clone of the upstream repo inside the AUR
+  # working tree — and AUR rejects pushes whose commit contains any
+  # subdirectory. Use `paru -S sentinel-kde-git` from another source if
+  # you want VCS tracking; the canonical AUR package is stable only.
   # ---------------------------------------------------------------------------
   publish-aur:
     needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - pkgname: sentinel-kde
-            pkgbuild: packaging/arch/PKGBUILD
-          - pkgname: sentinel-kde-git
-            pkgbuild: packaging/arch/PKGBUILD-git
     steps:
       - uses: actions/checkout@v4
 
       - name: Stage PKGBUILD + install hook
         run: |
           mkdir -p aur-stage
-          cp "${{ matrix.pkgbuild }}" aur-stage/PKGBUILD
+          cp packaging/arch/PKGBUILD aur-stage/PKGBUILD
           cp packaging/arch/sentinel-kde.install aur-stage/
 
       # Pinned to a tagged release (not @master) so a hijacked action
@@ -198,7 +195,7 @@ jobs:
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
         with:
-          pkgname: ${{ matrix.pkgname }}
+          pkgname: sentinel-kde
           pkgbuild: aur-stage/PKGBUILD
           assets: aur-stage/sentinel-kde.install
           commit_username: sipsip

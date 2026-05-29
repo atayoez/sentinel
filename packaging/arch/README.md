@@ -1,18 +1,28 @@
 # Arch packaging
 
-Two PKGBUILDs:
+`PKGBUILD` — stable release. Pulls the GitHub release tarball (`v$pkgver`).
+Submit to AUR as **`sentinel-kde`**.
 
-- `PKGBUILD` — stable release. Pulls the GitHub release tarball
-  (`v$pkgver`). Submit to AUR as **`sentinel-kde`**.
-- `PKGBUILD-git` — VCS package. Pulls main branch HEAD. Submit as
-  **`sentinel-kde-git`**.
+Ships:
 
-Both ship the same set of files, install the systemd **user** service
-(`/usr/lib/systemd/user/sentinel-polkit-agent.service`) symlinked into
-`graphical-session.target.wants/`, and conflict with `polkit-kde-agent`
-(only one polkit auth-agent can register per session). They also
-`provides=polkit-kde-agent` so `plasma-meta`'s dep is satisfied — pacman
-can swap them in a single transaction.
+- `sentinel-helper-kde` + `sentinel-polkit-agent` to `/usr/lib/`
+- `pam_sentinel.so` to `/usr/lib/security/`
+- systemd **user** service (`/usr/lib/systemd/user/sentinel-polkit-agent.service`)
+  symlinked into `graphical-session.target.wants/`
+- DBus system-bus policy (`/usr/share/dbus-1/system.d/org.sentinel.Agent.conf`)
+- Polkit admin rule (`/etc/polkit-1/rules.d/49-sentinel-admin.rules`)
+
+Conflicts with `polkit-kde-agent` (only one polkit auth-agent can register per
+session) and `provides=polkit-kde-agent` so `plasma-meta`'s dep is satisfied —
+pacman can swap them in a single transaction.
+
+> **No `-git` companion.** KSXGitHub's `deploy-aur` runs `updpkgsums`, which
+> turns a `-git` PKGBUILD's `source=("…::git+…")` into a real upstream clone
+> *inside the AUR working tree*. AUR rejects pushes whose commit contains
+> any subdirectory, so the action can't submit a `-git` package end-to-end
+> from CI. The canonical AUR package is stable-only; if you want VCS
+> tracking, install from this repo directly (`git clone … && sudo
+> ./install.sh`).
 
 ## Local build + test
 
@@ -21,10 +31,6 @@ can swap them in a single transaction.
 cd packaging/arch
 makepkg -Cs                   # clean tree, fetch makedepends
 sudo pacman -U sentinel-kde-*.pkg.tar.zst
-
-# Or build the -git variant:
-ln -sf PKGBUILD-git PKGBUILD  # makepkg always reads ./PKGBUILD
-makepkg -Cs
 ```
 
 `makepkg --check` runs the workspace's pure-Rust tests (PAM module +
@@ -60,9 +66,6 @@ git commit -m "sentinel-kde ${pkgver}-${pkgrel}: initial release"
 git push origin master
 ```
 
-Same flow for `sentinel-kde-git`, but skip step 4 (VCS packages keep
-`sha256sums=('SKIP')`).
-
 ## Updating on release
 
 For each new tag `vX.Y.Z`:
@@ -78,9 +81,8 @@ git commit -am "sentinel-kde X.Y.Z-1"
 git push
 ```
 
-The `-git` variant only needs a push when the PKGBUILD itself changes
-(deps, build flags, file layout). `pkgver` is recomputed at build time
-by the `pkgver()` function — no manual bump.
+The `.github/workflows/release.yml` workflow does steps 4–7 automatically
+on every `v*` tag push.
 
 ## Activation after install
 
