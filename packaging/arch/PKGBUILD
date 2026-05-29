@@ -1,17 +1,23 @@
 # SPDX-FileCopyrightText: 2025 Atay Özcan <atay@oezcan.me>
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Maintainer: Atay Özcan <atay@oezcan.me>
-pkgname=sentinel
+pkgname=sentinel-cosmic
 pkgver=0.8.0
 pkgrel=1
-install=sentinel.install
+install=sentinel-cosmic.install
 # Cargo.toml's release profile already strips symbols (`strip = "symbols"`),
 # so makepkg's debug-package generator has nothing to index — opt out to
 # avoid noisy gdb-add-index "No debugging symbols" errors.
 options=('!debug')
 pkgdesc="UAC-style confirmation dialog for Linux privilege escalation (COSMIC + sudo-rs friendly)"
 arch=('x86_64' 'aarch64')
-url="https://github.com/atayozcan/sentinel"
+url="https://github.com/atayozcan/sentinel-cosmic"
+# Was published on AUR as `sentinel` for 0.x; renamed to make the COSMIC
+# target explicit alongside the KDE sibling (sentinel-kde). The old
+# `sentinel` AUR slot is being merged into this one.
+replaces=('sentinel')
+conflicts=('sentinel')
+provides=('sentinel')
 license=('GPL-3.0-or-later')
 depends=(
     'pam'

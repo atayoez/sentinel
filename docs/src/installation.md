@@ -27,11 +27,11 @@ so a `pacman -Rsn sentinel` won't clobber your customisations.
 ## Debian / Ubuntu
 
 ```bash
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel_0.8.0-1_amd64.deb
+curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel_0.8.0-1_amd64.deb
 sudo apt install ./sentinel_0.8.0-1_amd64.deb
 
 # aarch64 (Pi 4/5, Ampere, etc.):
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel_0.8.0-1_arm64.deb
+curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel_0.8.0-1_arm64.deb
 sudo apt install ./sentinel_0.8.0-1_arm64.deb
 ```
 
@@ -42,7 +42,7 @@ sudo coverage — see [PAM wiring](./pam-wiring.md).
 ## Fedora / openSUSE
 
 ```bash
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel-0.8.0-1.x86_64.rpm
+curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel-0.8.0-1.x86_64.rpm
 sudo dnf install ./sentinel-0.8.0-1.x86_64.rpm
 ```
 
@@ -52,7 +52,7 @@ The repo's `flake.nix` exposes a NixOS module:
 
 ```nix
 {
-  inputs.sentinel.url = "github:atayozcan/sentinel";
+  inputs.sentinel.url = "github:atayozcan/sentinel-cosmic";
 
   outputs = { self, nixpkgs, sentinel, ... }: {
     nixosConfigurations.<host> = nixpkgs.lib.nixosSystem {
@@ -71,13 +71,13 @@ The repo's `flake.nix` exposes a NixOS module:
 Or run the helper ad-hoc without installing:
 
 ```bash
-nix run github:atayozcan/sentinel -- --timeout 10 --randomize
+nix run github:atayozcan/sentinel-cosmic -- --timeout 10 --randomize
 ```
 
 ## Generic binary tarball
 
 ```bash
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel-0.8.0-x86_64-linux.tar.gz
+curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel-0.8.0-x86_64-linux.tar.gz
 tar xzf sentinel-0.8.0-x86_64-linux.tar.gz
 cd sentinel-0.8.0
 sudo ./install.sh
@@ -86,7 +86,7 @@ sudo ./install.sh
 ## Source
 
 ```bash
-git clone https://github.com/atayozcan/sentinel
+git clone https://github.com/atayozcan/sentinel-cosmic
 cd sentinel
 pkexec ./install.sh
 ```
@@ -114,7 +114,7 @@ attestations:
 
 ```bash
 gh attestation verify sentinel_0.8.0-1_amd64.deb \
-    --repo atayozcan/sentinel
+    --repo atayozcan/sentinel-cosmic
 ```
 
 The signature binds the file's sha256 to the release.yml workflow

@@ -11,7 +11,7 @@
 ## Building
 
 ```bash
-git clone https://github.com/atayozcan/sentinel
+git clone https://github.com/atayozcan/sentinel-cosmic
 cd sentinel
 cargo build --release --workspace --locked
 ```

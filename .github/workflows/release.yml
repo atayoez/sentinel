@@ -163,7 +163,7 @@ jobs:
         run: |
           v="${GITHUB_REF_NAME#v}"
           gh release create "$GITHUB_REF_NAME" \
-            --title "Sentinel v$v" \
+            --title "Sentinel-COSMIC v$v" \
             --notes-file .github/release-notes/v$v.md \
             dist/*
 
@@ -199,28 +199,24 @@ jobs:
   # `updpkgsums` catches a wrong source URL. If you ever want a real
   # chroot smoke-test, drop in `extra-x86_64-build` from
   # `archlinux/devtools` before the deploy step.
+  # `sentinel-cosmic` stable only — the `-git` AUR slot was dropped because
+  # KSXGitHub's deploy-aur runs `updpkgsums`, which clones a VCS PKGBUILD's
+  # `source=("…::git+…")` into the AUR working tree, and AUR rejects
+  # pushes whose commit contains any subdirectory. Canonical AUR package
+  # is stable-only; install from this repo directly for VCS tracking.
   publish-aur:
     needs: release
     runs-on: ubuntu-latest
-    # Only needs to read the repo + the AUR_SSH_PRIVATE_KEY secret;
-    # no write access to anything on github.com.
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - pkgname: sentinel
-            pkgbuild: packaging/arch/PKGBUILD
-          - pkgname: sentinel-git
-            pkgbuild: packaging/arch/PKGBUILD-git
     steps:
       - uses: actions/checkout@v6
 
-      - name: Stage PKGBUILD
+      - name: Stage PKGBUILD + install hook
         run: |
           mkdir -p aur-stage
-          cp "${{ matrix.pkgbuild }}" aur-stage/PKGBUILD
+          cp packaging/arch/PKGBUILD aur-stage/PKGBUILD
+          cp packaging/arch/sentinel-cosmic.install aur-stage/
 
       # Pin to a tagged release (not @master) so a hijacked action can't
       # silently push to AUR with our key. Bump deliberately. Latest
@@ -233,8 +229,9 @@ jobs:
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
         with:
-          pkgname: ${{ matrix.pkgname }}
+          pkgname: sentinel-cosmic
           pkgbuild: aur-stage/PKGBUILD
+          assets: aur-stage/sentinel-cosmic.install
           commit_username: sipsip
           commit_email: atayozcan@pm.me
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

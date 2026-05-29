@@ -136,7 +136,7 @@ server → client: OK\n     (approval popped, fast-path the auth)
 
 ## Compatibility matrix
 
-See [README#Compatibility](https://github.com/atayozcan/sentinel#compatibility).
+See [README#Compatibility](https://github.com/atayozcan/sentinel-cosmic#compatibility).
 The agent's autostart entry uses `NotShowIn=` to exclude desktops
 with built-in polkit agents (GNOME, KDE, XFCE, LXDE, Cinnamon, MATE,
 LXQt, Pantheon, Budgie) and lets every other compositor pick it up

@@ -30,7 +30,7 @@ That makes the load-bearing piece host-only. The companion
 | AUR      | First-class | `sentinel` and `sentinel-git`. See `packaging/arch/PKGBUILD`. |
 | .deb     | Shipped | Built by `release.yml`; download from GitHub releases. |
 | .rpm     | Shipped | Built by `release.yml`; download from GitHub releases. |
-| NixOS    | Shipped | Flake at the repo root, `nix run github:atayozcan/sentinel`. |
+| NixOS    | Shipped | Flake at the repo root, `nix run github:atayozcan/sentinel-cosmic`. |
 | Flatpak  | Not viable | See above. |
 | Source   | Supported | `pkexec ./install.sh`. |
 

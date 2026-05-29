@@ -119,9 +119,9 @@ journalctl -t pam_sentinel -t sentinel-polkit-agent \
 
 ## Reporting bugs
 
-[`bug_report.yml`](https://github.com/atayozcan/sentinel/issues/new?template=bug_report.yml)
+[`bug_report.yml`](https://github.com/atayozcan/sentinel-cosmic/issues/new?template=bug_report.yml)
 is the standard template. For compositor compatibility specifically,
-the [compositor compat template](https://github.com/atayozcan/sentinel/issues/new?template=compositor_compat.yml)
+the [compositor compat template](https://github.com/atayozcan/sentinel-cosmic/issues/new?template=compositor_compat.yml)
 feeds the README compatibility table directly.
 
 For security issues, use private vulnerability reporting — see

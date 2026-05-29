@@ -1,21 +1,21 @@
 # Contributing to Sentinel
 
 Thanks for your interest in Sentinel! Full guidance lives on the
-**[Contributing wiki page](https://github.com/atayozcan/sentinel/wiki/Contributing)**;
+**[Contributing wiki page](https://github.com/atayozcan/sentinel-cosmic/wiki/Contributing)**;
 this file is the short version for first-time contributors landing in
 the repo.
 
 ## Reporting bugs and security issues
 
 - **Bugs that aren't security issues**: open a
-  [bug report](https://github.com/atayozcan/sentinel/issues/new/choose).
+  [bug report](https://github.com/atayozcan/sentinel-cosmic/issues/new/choose).
 - **Security vulnerabilities**: see [SECURITY.md](.github/SECURITY.md).
   *Please don't open public issues for these.*
 
 ## Development quickstart
 
 ```bash
-git clone https://github.com/atayozcan/sentinel
+git clone https://github.com/atayozcan/sentinel-cosmic
 cd sentinel
 
 # Build the workspace.
@@ -72,7 +72,7 @@ checks reviewers will look for. The big ones:
 
 Open-ended questions — design tradeoffs, "would you take a PR for X",
 "is this in scope" — go in
-[Discussions](https://github.com/atayozcan/sentinel/discussions)
+[Discussions](https://github.com/atayozcan/sentinel-cosmic/discussions)
 rather than issues.
 
 ## License

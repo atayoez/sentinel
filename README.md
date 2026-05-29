@@ -1,9 +1,9 @@
-# Sentinel
+# Sentinel-COSMIC
 
-[![CI](https://github.com/atayozcan/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/atayozcan/sentinel/actions/workflows/ci.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/atayozcan/sentinel/badge)](https://scorecard.dev/viewer/?uri=github.com/atayozcan/sentinel)
-[![REUSE compliant](https://api.reuse.software/badge/github.com/atayozcan/sentinel)](https://api.reuse.software/info/github.com/atayozcan/sentinel)
-[![Latest release](https://img.shields.io/github/v/release/atayozcan/sentinel?include_prereleases&sort=semver)](https://github.com/atayozcan/sentinel/releases/latest)
+[![CI](https://github.com/atayozcan/sentinel-cosmic/actions/workflows/ci.yml/badge.svg)](https://github.com/atayozcan/sentinel-cosmic/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/atayozcan/sentinel-cosmic/badge)](https://scorecard.dev/viewer/?uri=github.com/atayozcan/sentinel-cosmic)
+[![REUSE compliant](https://api.reuse.software/badge/github.com/atayozcan/sentinel-cosmic)](https://api.reuse.software/info/github.com/atayozcan/sentinel-cosmic)
+[![Latest release](https://img.shields.io/github/v/release/atayozcan/sentinel-cosmic?include_prereleases&sort=semver)](https://github.com/atayozcan/sentinel-cosmic/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-blue.svg)](rust-toolchain.toml)
 
@@ -14,7 +14,7 @@ Wayland-only.
 > [!CAUTION]
 > Sentinel sits in the **PAM authentication path**. A misconfiguration
 > can lock you out of `sudo`, polkit, or login. Read the wiki's
-> [Troubleshooting](https://github.com/atayozcan/sentinel/wiki/Troubleshooting)
+> [Troubleshooting](https://github.com/atayozcan/sentinel-cosmic/wiki/Troubleshooting)
 > page **before** you install. Open a second root shell during the
 > first install (`pkexec bash`) and keep it open until you've verified
 > `sudo` still works.
@@ -26,19 +26,19 @@ Wayland-only.
 
 ## Documentation
 
-Full docs live at **<https://atayozcan.github.io/sentinel/>** (built
+Full docs live at **<https://atayozcan.github.io/sentinel-cosmic/>** (built
 from `docs/` via mdBook, deployed by `.github/workflows/docs.yml`):
 
-- [Installation](https://atayozcan.github.io/sentinel/installation.html) — AUR, Debian, Fedora, NixOS, generic tarball, source
-- [Configuration](https://atayozcan.github.io/sentinel/configuration.html) — `/etc/security/sentinel.conf` reference
-- [PAM wiring](https://atayozcan.github.io/sentinel/pam-wiring.html) — `sudo`, `polkit`, `su`
-- [Building from source](https://atayozcan.github.io/sentinel/building-from-source.html)
-- [Architecture](https://atayozcan.github.io/sentinel/architecture.html) — design and security model
-- [Troubleshooting](https://atayozcan.github.io/sentinel/troubleshooting.html) — recovery, common failures, debug logging
-- [Contributing](https://atayozcan.github.io/sentinel/contributing.html)
-- [Security policy](https://atayozcan.github.io/sentinel/security.html)
+- [Installation](https://atayozcan.github.io/sentinel-cosmic/installation.html) — AUR, Debian, Fedora, NixOS, generic tarball, source
+- [Configuration](https://atayozcan.github.io/sentinel-cosmic/configuration.html) — `/etc/security/sentinel.conf` reference
+- [PAM wiring](https://atayozcan.github.io/sentinel-cosmic/pam-wiring.html) — `sudo`, `polkit`, `su`
+- [Building from source](https://atayozcan.github.io/sentinel-cosmic/building-from-source.html)
+- [Architecture](https://atayozcan.github.io/sentinel-cosmic/architecture.html) — design and security model
+- [Troubleshooting](https://atayozcan.github.io/sentinel-cosmic/troubleshooting.html) — recovery, common failures, debug logging
+- [Contributing](https://atayozcan.github.io/sentinel-cosmic/contributing.html)
+- [Security policy](https://atayozcan.github.io/sentinel-cosmic/security.html)
 
-The legacy [GitHub wiki](https://github.com/atayozcan/sentinel/wiki) is
+The legacy [GitHub wiki](https://github.com/atayozcan/sentinel-cosmic/wiki) is
 preserved as historical reference until v1.0; new content lives in
 `docs/` and is PR-reviewable.
 
@@ -49,23 +49,23 @@ preserved as historical reference until v1.0; new content lives in
 yay -S sentinel
 
 # Debian / Ubuntu
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel_0.8.0-1_amd64.deb
+curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel_0.8.0-1_amd64.deb
 sudo apt install ./sentinel_0.8.0-1_amd64.deb
 
 # Fedora / openSUSE
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel-0.8.0-1.x86_64.rpm
+curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel-0.8.0-1.x86_64.rpm
 sudo dnf install ./sentinel-0.8.0-1.x86_64.rpm
 
 # NixOS — flake at the repo root
-nix run github:atayozcan/sentinel -- --timeout 10 --randomize
+nix run github:atayozcan/sentinel-cosmic -- --timeout 10 --randomize
 
 # From source
-git clone https://github.com/atayozcan/sentinel
+git clone https://github.com/atayozcan/sentinel-cosmic
 cd sentinel
 pkexec ./install.sh
 ```
 
-See the [Installation](https://github.com/atayozcan/sentinel/wiki/Installation)
+See the [Installation](https://github.com/atayozcan/sentinel-cosmic/wiki/Installation)
 wiki page for full instructions, including the prebuilt binary tarball
 and per-distro details.
 
@@ -133,5 +133,5 @@ table — bonus points for a screenshot.
 
 **GPL-3.0-or-later.** See [LICENSE](LICENSE). GPL-3.0 sections 15 and
 16 disclaim all warranty and limit liability — see the
-[Home](https://github.com/atayozcan/sentinel/wiki) page of the wiki
+[Home](https://github.com/atayozcan/sentinel-cosmic/wiki) page of the wiki
 for the full quoted text.
