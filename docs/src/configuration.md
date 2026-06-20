@@ -187,8 +187,8 @@ in Ns") is localized from the system locale (`LC_ALL`/`LC_MESSAGES`/`LANG`).
   en-US, de-DE, es-ES, fr-FR, it-IT, ja-JP, nl-NL, pl-PL, pt-BR, ru-RU,
   tr-TR, zh-CN.
 - The **KDE** helper (`sentinel-helper-kde`) localizes the same chrome via
-  `sentinel_shared::ui_i18n` — currently en, de, es, extensible to the
-  rest of the set.
+  `sentinel_shared::ui_i18n` — all 12 locales (en, de, es, fr, it, ja, nl, pl, pt, ru, tr, zh), matching the
+  COSMIC frontend.
 
 The dialog message/title/secondary are admin-supplied via this config
 file — they're rendered verbatim as you write them. If you leave the
