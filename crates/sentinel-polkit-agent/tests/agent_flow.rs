@@ -42,6 +42,8 @@ fn cfg() -> ServiceConfig {
         secondary: String::new(),
         sound_name: String::new(),
         policy: Default::default(),
+        notify_on_deny: false,
+        notify_on_timeout: false,
     }
 }
 

@@ -148,6 +148,35 @@ pub struct Document {
     pub services: HashMap<String, ServiceOverride>,
     #[serde(default)]
     pub policy: Policy,
+    #[serde(default)]
+    pub notifications: Notifications,
+}
+
+/// Desktop-notification settings (`[notifications]`). The agent posts a
+/// notification on the polkit/GUI auth path; terminal `sudo`/`su`
+/// denials are already visible in the terminal, so they're not covered.
+/// Both default off.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Notifications {
+    #[serde(default)]
+    pub on_deny: bool,
+    #[serde(default)]
+    pub on_timeout: bool,
+}
+
+/// Best-effort desktop notification via `notify-send` (libnotify). No-op
+/// if `notify-send` isn't installed or the spawn fails — never blocks or
+/// errors the auth path. Must be called from a process in the user's
+/// session (the agent), not the root PAM module.
+pub fn desktop_notify(summary: &str, body: &str) {
+    let _ = std::process::Command::new("notify-send")
+        .args(["--app-name=Sentinel", "--icon=system-lock-screen", "--urgency=normal"])
+        .arg(summary)
+        .arg(body)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -332,6 +361,12 @@ pub struct ServiceConfig {
     /// Static allow/deny policy from `[policy]`, evaluated before the
     /// dialog. Not per-service overridable.
     pub policy: Policy,
+    /// Post a desktop notification when this request is denied
+    /// (`[notifications].on_deny`). Agent/polkit path only.
+    pub notify_on_deny: bool,
+    /// Post a desktop notification when this request times out
+    /// (`[notifications].on_timeout`).
+    pub notify_on_timeout: bool,
 }
 
 impl Document {
@@ -342,6 +377,7 @@ impl Document {
             audio: Audio::default(),
             services: HashMap::new(),
             policy: Policy::default(),
+            notifications: Notifications::default(),
         }
     }
 
@@ -362,6 +398,8 @@ impl Document {
             secondary: self.appearance.secondary.clone(),
             sound_name: self.audio.sound_name.clone(),
             policy: self.policy.clone(),
+            notify_on_deny: self.notifications.on_deny,
+            notify_on_timeout: self.notifications.on_timeout,
         };
         if let Some(over) = self.services.get(service) {
             if let Some(v) = over.enabled {
@@ -1002,6 +1040,7 @@ mod tests {
             audio: Audio::default(),
             services,
             policy: Policy::default(),
+            notifications: Notifications::default(),
         }
     }
 

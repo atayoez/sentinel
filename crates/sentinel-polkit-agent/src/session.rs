@@ -52,6 +52,12 @@ pub async fn run(queue: ApprovalQueue, inputs: AuthInputs<'_>) -> Result<bool> {
                 q(process_name),
                 session
             );
+            if inputs.cfg.notify_on_deny {
+                sentinel_shared::desktop_notify(
+                    "Privilege request blocked",
+                    &format!("Policy denied an elevation request from {process_name}."),
+                );
+            }
             return Ok(false);
         }
         PolicyDecision::Allow => {
@@ -124,6 +130,12 @@ pub async fn run(queue: ApprovalQueue, inputs: AuthInputs<'_>) -> Result<bool> {
                 latency_ms,
                 session
             );
+            if inputs.cfg.notify_on_deny {
+                sentinel_shared::desktop_notify(
+                    "Authentication denied",
+                    &format!("You denied an elevation request from {process_name}."),
+                );
+            }
             return Ok(false);
         }
         Outcome::Timeout => {
@@ -135,6 +147,12 @@ pub async fn run(queue: ApprovalQueue, inputs: AuthInputs<'_>) -> Result<bool> {
                 latency_ms,
                 session
             );
+            if inputs.cfg.notify_on_timeout {
+                sentinel_shared::desktop_notify(
+                    "Authentication timed out",
+                    &format!("An elevation request from {process_name} was auto-denied (no response)."),
+                );
+            }
             return Ok(false);
         }
         Outcome::Allow => {
