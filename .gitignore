@@ -20,6 +20,10 @@ Cargo.lock.bak
 *.pkg.tar.xz
 /packaging/arch/*.tar.gz
 /packaging/arch/sentinel-*
+# …but .install hooks are source, not build artefacts — keep them tracked.
+# (this glob previously silently swallowed sentinel-cosmic.install, which
+# is why the AUR publish couldn't find it).
+!/packaging/arch/*.install
 
 # Release artefacts
 /dist/
