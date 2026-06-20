@@ -10,7 +10,7 @@ body:
         fill in the relevant sections.
 
         **If this is a security vulnerability, do NOT use this form.**
-        See [SECURITY.md](https://github.com/atayozcan/sentinel-cosmic/blob/main/.github/SECURITY.md)
+        See [SECURITY.md](https://github.com/atayozcan/sentinel/blob/main/.github/SECURITY.md)
         for the private reporting channel.
 
   - type: input

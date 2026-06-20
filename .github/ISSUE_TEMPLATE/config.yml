@@ -4,8 +4,8 @@ blank_issues_enabled: false
 
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/atayozcan/sentinel-cosmic/security/advisories/new
+    url: https://github.com/atayozcan/sentinel/security/advisories/new
     about: Use GitHub Private Vulnerability Reporting — see SECURITY.md.
   - name: General question / discussion
-    url: https://github.com/atayozcan/sentinel-cosmic/discussions
+    url: https://github.com/atayozcan/sentinel/discussions
     about: Open a discussion thread instead of an issue.

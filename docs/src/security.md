@@ -1,15 +1,15 @@
 # Security policy
 
 The full text lives at
-[`.github/SECURITY.md`](https://github.com/atayozcan/sentinel-cosmic/blob/main/.github/SECURITY.md)
+[`.github/SECURITY.md`](https://github.com/atayozcan/sentinel/blob/main/.github/SECURITY.md)
 in the repo root and is what GitHub renders on the
-[security tab](https://github.com/atayozcan/sentinel-cosmic/security).
+[security tab](https://github.com/atayozcan/sentinel/security).
 This page is a brief summary; reporters should follow the canonical
 copy.
 
 ## Reporting a vulnerability
 
-1. **Preferred:** [GitHub Private Vulnerability Reporting](https://github.com/atayozcan/sentinel-cosmic/security)
+1. **Preferred:** [GitHub Private Vulnerability Reporting](https://github.com/atayozcan/sentinel/security)
    ("Report a vulnerability" button).
 2. **Email:** `atay@oezcan.me` with subject "Sentinel security".
 
@@ -40,7 +40,7 @@ binding the file's sha256 to the GitHub Actions run that produced
 it. Verify:
 
 ```bash
-gh attestation verify <file> --repo atayozcan/sentinel-cosmic
+gh attestation verify <file> --repo atayozcan/sentinel
 ```
 
 Downstream packagers (AUR, Debian, Fedora) are encouraged to run

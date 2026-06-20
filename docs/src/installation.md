@@ -12,27 +12,29 @@ either installs the binary tarball or builds from source.
 
 ## Arch Linux (AUR)
 
-Two packages: `sentinel` (stable releases) and `sentinel-git` (main
-branch HEAD).
+One package per frontend (both stable, built from this monorepo):
+`sentinel-kde` (KDE Plasma) and `sentinel-cosmic` (COSMIC).
 
 ```bash
-yay -S sentinel
+yay -S sentinel-kde       # KDE Plasma / Kirigami dialog
 # or
-paru -S sentinel-git
+yay -S sentinel-cosmic    # COSMIC / libcosmic dialog
 ```
 
-Both `backup=` `/etc/security/sentinel.conf` and `/etc/pam.d/polkit-1`
-so a `pacman -Rsn sentinel` won't clobber your customisations.
+They install the same backend to the same paths, so pick one — they
+conflict. Both `backup=` `/etc/security/sentinel.conf` and
+`/etc/pam.d/polkit-1` so a `pacman -Rsn` won't clobber your
+customisations.
 
 ## Debian / Ubuntu
 
 ```bash
-curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel_0.8.0-1_amd64.deb
-sudo apt install ./sentinel_0.8.0-1_amd64.deb
+curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel_0.9.0-1_amd64.deb
+sudo apt install ./sentinel_0.9.0-1_amd64.deb
 
 # aarch64 (Pi 4/5, Ampere, etc.):
-curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel_0.8.0-1_arm64.deb
-sudo apt install ./sentinel_0.8.0-1_arm64.deb
+curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel_0.9.0-1_arm64.deb
+sudo apt install ./sentinel_0.9.0-1_arm64.deb
 ```
 
 After install, the polkit agent autostarts on next graphical login.
@@ -42,8 +44,8 @@ sudo coverage — see [PAM wiring](./pam-wiring.md).
 ## Fedora / openSUSE
 
 ```bash
-curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel-0.8.0-1.x86_64.rpm
-sudo dnf install ./sentinel-0.8.0-1.x86_64.rpm
+curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel-0.9.0-1.x86_64.rpm
+sudo dnf install ./sentinel-0.9.0-1.x86_64.rpm
 ```
 
 ## NixOS
@@ -52,7 +54,7 @@ The repo's `flake.nix` exposes a NixOS module:
 
 ```nix
 {
-  inputs.sentinel.url = "github:atayozcan/sentinel-cosmic";
+  inputs.sentinel.url = "github:atayozcan/sentinel";
 
   outputs = { self, nixpkgs, sentinel, ... }: {
     nixosConfigurations.<host> = nixpkgs.lib.nixosSystem {
@@ -71,24 +73,40 @@ The repo's `flake.nix` exposes a NixOS module:
 Or run the helper ad-hoc without installing:
 
 ```bash
-nix run github:atayozcan/sentinel-cosmic -- --timeout 10 --randomize
+nix run github:atayozcan/sentinel -- --timeout 10 --randomize
 ```
 
 ## Generic binary tarball
 
+Each release publishes a prebuilt bundle per frontend and arch:
+`sentinel-<ver>-<arch>-linux.tar.gz` (COSMIC) and
+`sentinel-kde-<ver>-<arch>-linux.tar.gz` (KDE). Extract and run its
+`install.sh` with `SENTINEL_SKIP_BUILD=1` — no toolchain needed.
+
 ```bash
-curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel-0.8.0-x86_64-linux.tar.gz
-tar xzf sentinel-0.8.0-x86_64-linux.tar.gz
-cd sentinel-0.8.0
-sudo ./install.sh
+# COSMIC frontend
+curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel-0.9.0-x86_64-linux.tar.gz
+tar xzf sentinel-0.9.0-x86_64-linux.tar.gz
+cd sentinel-0.9.0
+sudo SENTINEL_SKIP_BUILD=1 ./install.sh
+
+# KDE frontend: swap in sentinel-kde-0.9.0-x86_64-linux.tar.gz
 ```
+
+The deb / rpm prebuilts ship the **COSMIC** frontend; the KDE frontend
+ships via the AUR package or its tarball/source.
 
 ## Source
 
+The COSMIC frontend installs from the repo root; the KDE frontend from
+`packaging-kde/`. Both pull in the shared backend.
+
 ```bash
-git clone https://github.com/atayozcan/sentinel-cosmic
+git clone https://github.com/atayozcan/sentinel
 cd sentinel
-pkexec ./install.sh
+pkexec ./install.sh                 # COSMIC frontend
+# or
+pkexec ./packaging-kde/install.sh   # KDE Plasma frontend
 ```
 
 The installer:
@@ -113,8 +131,8 @@ Every artifact is signed by Sigstore via GitHub's artifact
 attestations:
 
 ```bash
-gh attestation verify sentinel_0.8.0-1_amd64.deb \
-    --repo atayozcan/sentinel-cosmic
+gh attestation verify sentinel_0.9.0-1_amd64.deb \
+    --repo atayozcan/sentinel
 ```
 
 The signature binds the file's sha256 to the release.yml workflow

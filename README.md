@@ -1,20 +1,24 @@
-# Sentinel-COSMIC
+# Sentinel
 
-[![CI](https://github.com/atayozcan/sentinel-cosmic/actions/workflows/ci.yml/badge.svg)](https://github.com/atayozcan/sentinel-cosmic/actions/workflows/ci.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/atayozcan/sentinel-cosmic/badge)](https://scorecard.dev/viewer/?uri=github.com/atayozcan/sentinel-cosmic)
-[![REUSE compliant](https://api.reuse.software/badge/github.com/atayozcan/sentinel-cosmic)](https://api.reuse.software/info/github.com/atayozcan/sentinel-cosmic)
-[![Latest release](https://img.shields.io/github/v/release/atayozcan/sentinel-cosmic?include_prereleases&sort=semver)](https://github.com/atayozcan/sentinel-cosmic/releases/latest)
+[![CI](https://github.com/atayozcan/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/atayozcan/sentinel/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/atayozcan/sentinel/badge)](https://scorecard.dev/viewer/?uri=github.com/atayozcan/sentinel)
+[![REUSE compliant](https://api.reuse.software/badge/github.com/atayozcan/sentinel)](https://api.reuse.software/info/github.com/atayozcan/sentinel)
+[![Latest release](https://img.shields.io/github/v/release/atayozcan/sentinel?include_prereleases&sort=semver)](https://github.com/atayozcan/sentinel/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-blue.svg)](rust-toolchain.toml)
 
 A Windows UAC-style confirmation dialog for Linux privilege escalation.
-PAM module + libcosmic helper, designed for COSMIC and `sudo-rs`,
-Wayland-only.
+A shared PAM + polkit-agent backend with **two desktop frontends** — KDE
+Plasma (Kirigami) and COSMIC (libcosmic). Wayland-only, `sudo-rs` friendly.
+
+> **Monorepo note.** This repository unifies the former `sentinel-kde`
+> and `sentinel-cosmic` projects: one backend, two frontends, released
+> in lockstep. The old repositories are archived and redirect here.
 
 > [!CAUTION]
 > Sentinel sits in the **PAM authentication path**. A misconfiguration
-> can lock you out of `sudo`, polkit, or login. Read the wiki's
-> [Troubleshooting](https://github.com/atayozcan/sentinel-cosmic/wiki/Troubleshooting)
+> can lock you out of `sudo`, polkit, or login. Read the
+> [Troubleshooting](https://atayozcan.github.io/sentinel/troubleshooting.html)
 > page **before** you install. Open a second root shell during the
 > first install (`pkexec bash`) and keep it open until you've verified
 > `sudo` still works.
@@ -26,48 +30,51 @@ Wayland-only.
 
 ## Documentation
 
-Full docs live at **<https://atayozcan.github.io/sentinel-cosmic/>** (built
+Full docs live at **<https://atayozcan.github.io/sentinel/>** (built
 from `docs/` via mdBook, deployed by `.github/workflows/docs.yml`):
 
-- [Installation](https://atayozcan.github.io/sentinel-cosmic/installation.html) — AUR, Debian, Fedora, NixOS, generic tarball, source
-- [Configuration](https://atayozcan.github.io/sentinel-cosmic/configuration.html) — `/etc/security/sentinel.conf` reference
-- [PAM wiring](https://atayozcan.github.io/sentinel-cosmic/pam-wiring.html) — `sudo`, `polkit`, `su`
-- [Building from source](https://atayozcan.github.io/sentinel-cosmic/building-from-source.html)
-- [Architecture](https://atayozcan.github.io/sentinel-cosmic/architecture.html) — design and security model
-- [Troubleshooting](https://atayozcan.github.io/sentinel-cosmic/troubleshooting.html) — recovery, common failures, debug logging
-- [Contributing](https://atayozcan.github.io/sentinel-cosmic/contributing.html)
-- [Security policy](https://atayozcan.github.io/sentinel-cosmic/security.html)
-
-The legacy [GitHub wiki](https://github.com/atayozcan/sentinel-cosmic/wiki) is
-preserved as historical reference until v1.0; new content lives in
-`docs/` and is PR-reviewable.
+- [Installation](https://atayozcan.github.io/sentinel/installation.html) — AUR, Debian, Fedora, NixOS, generic tarball, source
+- [Configuration](https://atayozcan.github.io/sentinel/configuration.html) — `/etc/security/sentinel.conf` reference
+- [PAM wiring](https://atayozcan.github.io/sentinel/pam-wiring.html) — `sudo`, `polkit`, `su`
+- [Building from source](https://atayozcan.github.io/sentinel/building-from-source.html)
+- [Architecture](https://atayozcan.github.io/sentinel/architecture.html) — design and security model
+- [Troubleshooting](https://atayozcan.github.io/sentinel/troubleshooting.html) — recovery, common failures, debug logging
+- [Contributing](https://atayozcan.github.io/sentinel/contributing.html)
+- [Security policy](https://atayozcan.github.io/sentinel/security.html)
 
 ## Quick install
 
+Pick the frontend that matches your desktop. Both install the same
+backend (PAM module + polkit agent); only the dialog differs.
+
 ```bash
 # Arch Linux (AUR)
-yay -S sentinel
+yay -S sentinel-kde        # KDE Plasma (Kirigami dialog)
+yay -S sentinel-cosmic     # COSMIC (libcosmic dialog)
 
-# Debian / Ubuntu
-curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel_0.8.0-1_amd64.deb
-sudo apt install ./sentinel_0.8.0-1_amd64.deb
+# Debian / Ubuntu — COSMIC frontend
+curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel_0.9.0-1_amd64.deb
+sudo apt install ./sentinel_0.9.0-1_amd64.deb
 
-# Fedora / openSUSE
-curl -LO https://github.com/atayozcan/sentinel-cosmic/releases/latest/download/sentinel-0.8.0-1.x86_64.rpm
-sudo dnf install ./sentinel-0.8.0-1.x86_64.rpm
+# Fedora / openSUSE — COSMIC frontend
+curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel-0.9.0-1.x86_64.rpm
+sudo dnf install ./sentinel-0.9.0-1.x86_64.rpm
 
 # NixOS — flake at the repo root
-nix run github:atayozcan/sentinel-cosmic -- --timeout 10 --randomize
+nix run github:atayozcan/sentinel -- --timeout 10 --randomize
 
 # From source
-git clone https://github.com/atayozcan/sentinel-cosmic
+git clone https://github.com/atayozcan/sentinel
 cd sentinel
-pkexec ./install.sh
+pkexec ./install.sh                 # COSMIC frontend
+pkexec ./packaging-kde/install.sh   # KDE Plasma frontend
 ```
 
-See the [Installation](https://github.com/atayozcan/sentinel-cosmic/wiki/Installation)
-wiki page for full instructions, including the prebuilt binary tarball
-and per-distro details.
+See [Installation](https://atayozcan.github.io/sentinel/installation.html)
+for full instructions, including the prebuilt binary tarballs and
+per-distro details. Prebuilt bundles are published per release as
+`sentinel-<ver>-<arch>-linux.tar.gz` (COSMIC) and
+`sentinel-kde-<ver>-<arch>-linux.tar.gz` (KDE).
 
 > **Why `pkexec` for the source install?** The installer needs root
 > to write to `/etc/pam.d/`, `/etc/security/`, `/usr/lib/security/`,
@@ -80,20 +87,31 @@ and per-distro details.
 ## What it does
 
 When something requests privilege escalation (`sudo`, `pkexec`, …) and
-the PAM stack hits `pam_sentinel.so`, the module spawns
-`sentinel-helper`. The helper paints a `zwlr-layer-shell-v1` overlay
-surface — full-screen translucent backdrop, exclusive keyboard focus,
-dialog card centered — and waits for **Allow**, **Deny**, or a
-configurable timeout (auto-deny). Allow → PAM passes auth without a
-password. Deny / timeout / no Wayland display → PAM continues to the
-next module (typically `pam_unix`, the password prompt).
+the PAM stack hits `pam_sentinel.so`, the polkit agent spawns the
+frontend helper — `sentinel-helper-kde` on Plasma, `sentinel-helper` on
+COSMIC. The helper paints a `zwlr-layer-shell-v1` overlay surface —
+full-screen translucent backdrop, exclusive keyboard focus, dialog card
+centered — and waits for **Allow**, **Deny**, or a configurable timeout
+(auto-deny). Allow → PAM passes auth without a password. Deny / timeout
+/ no Wayland display → PAM continues to the next module (typically
+`pam_unix`, the password prompt).
+
+The approval is conveyed from the user's agent to `pam_sentinel.so`
+(running as root inside `polkit-agent-helper-1`) over the **system
+D-Bus** (`org.sentinel.Agent` → `TakeApproval`). D-Bus is used rather
+than a unix socket because it rides existing SELinux/AppArmor
+permissions (`policykit_t` may `dbus send_msg` but not write an
+arbitrary socket), so the bypass works under SELinux out of the box.
 
 ## Compatibility
 
+The dialog renders as a `zwlr-layer-shell-v1` overlay on wlroots-style
+compositors, falling back to a normal `xdg-toplevel` window on Mutter.
+
 | Compositor    | Status        | Notes |
 | ------------- | ------------- | ----- |
-| cosmic-comp   | tested        | primary target |
-| KWin/Wayland  | expected to work | Plasma 6.x ships `zwlr-layer-shell-v1`; Sentinel registers ahead of polkit-kde |
+| KWin/Wayland  | tested        | Plasma 6.x; the KDE frontend (`sentinel-helper-kde`) registers ahead of polkit-kde |
+| cosmic-comp   | tested        | the COSMIC frontend (`sentinel-helper`) |
 | Hyprland      | expected to work | sample animation/blur rules at `packaging/hyprland/sentinel.conf` |
 | Sway          | expected to work | reference wlroots compositor |
 | Niri          | expected to work | layer-shell overlay anchors fullscreen as on other wlroots-style compositors |
@@ -111,27 +129,32 @@ table — bonus points for a screenshot.
 
 ```
 .
-├── Cargo.toml                  # workspace root
+├── Cargo.toml                  # workspace root (backend + both frontends)
 ├── crates/
 │   ├── sentinel-shared/        # shared schema, parser, /proc + logind readers, log_kv
 │   ├── pam-sentinel/           # cdylib → /usr/lib/security/pam_sentinel.so
-│   ├── sentinel-helper/        # bin    → /usr/lib/sentinel-helper
+│   ├── sentinel-polkit-agent/  # bin    → /usr/lib/sentinel-polkit-agent (D-Bus bypass)
+│   ├── sentinel-helper/        # COSMIC / libcosmic frontend → /usr/lib/sentinel-helper
 │   │   └── locales/            # 12 embedded fluent bundles (en-US, de-DE, …)
-│   └── sentinel-polkit-agent/  # bin    → /usr/lib/sentinel-polkit-agent
+│   └── sentinel-helper-kde/    # KDE Plasma / Kirigami (cxx-qt) frontend → /usr/lib/sentinel-helper-kde
 ├── config/                     # /etc/security/sentinel.conf, /etc/pam.d/{polkit-1,sudo}
-├── packaging/                  # Arch PKGBUILDs, debian + systemd + xdg, FLATPAK rationale
+├── packaging/                  # COSMIC: Arch PKGBUILD, debian, systemd, xdg, dbus, FLATPAK rationale
+├── packaging-kde/              # KDE frontend: install.sh, PKGBUILD, packaging, build-release.sh
 ├── nix/module.nix              # NixOS module
 ├── flake.nix
-├── scripts/build-release.sh    # source + binary tarballs
+├── scripts/build-release.sh    # COSMIC source + binary tarballs
 ├── install.sh / uninstall.sh   # transactional installer (auto-rollback, in-place agent restart)
 └── .github/workflows/
-    ├── ci.yml                  # fmt + clippy + test + build on PRs
-    └── release.yml             # tag v* → builds + GH release
+    ├── ci.yml                  # fmt + clippy + test + build (both frontends) on PRs
+    └── release.yml             # tag v* → builds both bundles + one GH release + both AUR
 ```
+
+The backend (`pam-sentinel`, `sentinel-shared`, `sentinel-polkit-agent`)
+is kept out of `default-members`'s GUI deps, so a bare `cargo build`
+compiles the pure-Rust auth path without pulling Qt or libcosmic. Build
+a frontend explicitly with `cargo build -p sentinel-helper[-kde]`.
 
 ## License
 
 **GPL-3.0-or-later.** See [LICENSE](LICENSE). GPL-3.0 sections 15 and
-16 disclaim all warranty and limit liability — see the
-[Home](https://github.com/atayozcan/sentinel-cosmic/wiki) page of the wiki
-for the full quoted text.
+16 disclaim all warranty and limit liability.

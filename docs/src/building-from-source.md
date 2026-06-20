@@ -3,24 +3,38 @@
 ## Toolchain
 
 - Rust **1.85+** (workspace MSRV pinned in `rust-toolchain.toml`).
-- Linux build deps: `libpam0g-dev`, `libxkbcommon-dev`,
+- **Backend + COSMIC helper** deps: `libpam0g-dev`, `libxkbcommon-dev`,
   `libwayland-dev`, `libfontconfig1-dev`, `libfreetype6-dev`,
   `pkg-config`. (Arch: `pam wayland libxkbcommon fontconfig
   freetype2 mesa vulkan-icd-loader`.)
+- **KDE helper** also needs Qt 6 + KF 6 + cxx-qt's private headers
+  (openSUSE: `qt6-base-devel qt6-base-private-devel
+  qt6-declarative-devel qt6-declarative-private-devel
+  kf6-kirigami-imports kf6-qqc2-desktop-style layer-shell-qt6-imports
+  qt6-wayland`; Arch: `qt6-base qt6-declarative kirigami
+  layer-shell-qt`). It links with `mold`.
 
 ## Building
 
+The backend (PAM module + agent) is in `default-members`, so a bare
+build skips both GUI toolchains. Build a frontend explicitly.
+
 ```bash
-git clone https://github.com/atayozcan/sentinel-cosmic
+git clone https://github.com/atayozcan/sentinel
 cd sentinel
-cargo build --release --workspace --locked
+
+cargo build --release --locked                          # backend only (no Qt / libcosmic)
+cargo build --release --locked -p sentinel-helper       # + COSMIC frontend
+cargo build --release --locked -p sentinel-helper-kde   # + KDE frontend
+# `--workspace` builds everything, but then needs BOTH Qt and libcosmic.
 ```
 
 This produces:
 
 - `target/release/libpam_sentinel.so` — the cdylib
-- `target/release/sentinel-helper` — the GUI binary
 - `target/release/sentinel-polkit-agent` — the polkit agent
+- `target/release/sentinel-helper` — the COSMIC (libcosmic) dialog
+- `target/release/sentinel-helper-kde` — the KDE (Kirigami) dialog
 
 ## Running tests
 

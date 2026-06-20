@@ -1,6 +1,7 @@
 # Architecture
 
-Sentinel is three binaries plus one shared crate, in a single Cargo
+Sentinel is a shared backend (a PAM module, a polkit agent, and a
+shared crate) plus two interchangeable GUI frontends, in a single Cargo
 workspace.
 
 ```
@@ -9,19 +10,27 @@ crates/
 │                           # Outcome wire enum, log_kv helpers,
 │                           # POLKIT_PAM_SERVICE const, audit::init_syslog
 ├── pam-sentinel/           # cdylib → /usr/lib/security/pam_sentinel.so
-├── sentinel-helper/        # bin → /usr/lib/sentinel-helper (libcosmic dialog)
-└── sentinel-polkit-agent/  # bin → /usr/lib/sentinel-polkit-agent
+├── sentinel-polkit-agent/  # bin → /usr/lib/sentinel-polkit-agent
+├── sentinel-helper/        # COSMIC / libcosmic dialog → /usr/lib/sentinel-helper
+└── sentinel-helper-kde/    # KDE Plasma / Kirigami (cxx-qt) dialog → /usr/lib/sentinel-helper-kde
 ```
+
+The two helpers are drop-in alternatives — same CLI contract, same
+`ALLOW`/`DENY`/`TIMEOUT` wire output — so the backend spawns whichever
+is installed. The backend stays out of the GUI dependency graph: a bare
+`cargo build` compiles the auth path without Qt or libcosmic.
 
 ## The PAM module — `pam_sentinel.so`
 
 Loaded by libpam on every authentication attempt for whatever
 services have it wired in. For each call it picks one of:
 
-- **Bypass:** the polkit agent has already pre-approved this auth
-  via the local socket. Return `PAM_SUCCESS` immediately.
-- **Dialog:** spawn `sentinel-helper`, wait for Allow / Deny / timeout.
-  Return `PAM_SUCCESS` on Allow, `PAM_AUTH_ERR` otherwise.
+- **Bypass:** the polkit agent has already pre-approved this auth;
+  consume it over D-Bus (`org.sentinel.Agent`). Return `PAM_SUCCESS`
+  immediately.
+- **Dialog:** spawn the frontend helper (`sentinel-helper-kde` or
+  `sentinel-helper`), wait for Allow / Deny / timeout. Return
+  `PAM_SUCCESS` on Allow, `PAM_AUTH_ERR` otherwise.
 - **Headless:** no Wayland display detected. Return whatever
   `headless_action` says (default `PAM_IGNORE` → password prompt).
 - **Disabled:** `enabled = false` in config → `PAM_IGNORE`.
@@ -44,18 +53,28 @@ A per-user agent that registers with polkitd as the session's
 `sentinel-helper` for the dialog, then satisfies polkit's cookie
 validation via `polkit-agent-helper-1` over its socket.
 
-### Bypass socket
+### Bypass channel (system D-Bus)
 
-`$XDG_RUNTIME_DIR/sentinel-agent.sock` (mode `0600`, owned by the
-user). When the agent's own helper-1 invocation runs, the
-`pam_sentinel.so` inside it connects here, gets a one-shot
-"OK" / "NO" response, and short-circuits to `PAM_SUCCESS` without
-spawning a second dialog.
+The agent claims `org.sentinel.Agent` on the **system** bus and exposes
+a `TakeApproval` method. When the agent's own helper-1 invocation runs,
+the `pam_sentinel.so` inside it (running as root) calls `TakeApproval`,
+gets a one-shot `true` / `false`, and short-circuits to `PAM_SUCCESS`
+without spawning a second dialog.
 
-Per-connection check:
-1. `SO_PEERCRED` — peer uid must be 0 (helper-1 runs as root).
-2. `/proc/<peer-pid>/comm` must equal `polkit-agent-helper-1` or
-   its kernel-truncated form `polkit-agent-he` (TASK_COMM_LEN = 16).
+D-Bus — not a unix socket — because `polkit-agent-helper-1` runs as
+`policykit_t` under SELinux, which is denied writing an arbitrary
+socket but **is** permitted `dbus send_msg` to user domains (the same
+path `pam_fprintd` uses). The bypass therefore works under SELinux
+(openSUSE Tumbleweed, etc.) with no custom policy. The system-bus
+policy in `packaging/dbus/org.sentinel.Agent.conf` lets any user own
+the name but only root send to it.
+
+Per-call check:
+1. The caller (`pam_sentinel`) verifies the owner uid of
+   `org.sentinel.Agent` matches the user being authenticated
+   (`GetConnectionUnixUser`), defeating a same-name squatter from
+   another uid.
+2. The bus policy permits only `root` to call `TakeApproval`.
 
 Approvals are one-shot, expire after 1 second, and `cancel-authentication`
 drains the queue so a stale approval can't be picked up by a
@@ -75,11 +94,17 @@ DIFFERENT sessionid), and polkit's `RegisterAuthenticationAgent`
 rejects the mismatch with "Passed session and the session the caller
 is in differs". Sentinel's autostart entry sets
 `X-systemd-skip=true` so the systemd xdg-autostart-generator doesn't
-wrap it.
+wrap it. This is how the **COSMIC** frontend deploys the agent; the
+**KDE** frontend ships a `systemd --user` unit
+(`PartOf=graphical-session.target`) instead, which Plasma's session
+management starts within the correct graphical session.
 
-## The helper — `sentinel-helper`
+## The helpers — `sentinel-helper` / `sentinel-helper-kde`
 
-A libcosmic GUI binary that paints the dialog. Per-spawn:
+Two interchangeable GUI binaries that paint the dialog —
+`sentinel-helper` (COSMIC / libcosmic) and `sentinel-helper-kde` (KDE
+Plasma / Kirigami via cxx-qt). They share the CLI contract and wire
+output; the backend spawns whichever is installed. Per-spawn:
 
 - Initializes the global Fluent translation bundle from `LANG` /
   `LC_*` (locales embedded at compile time).
@@ -123,20 +148,20 @@ Format is logfmt (whitespace-separated `key=value`, values quoted
 when necessary). Designed for `journalctl -t pam_sentinel
 --output=cat | grep event=auth.deny` to be the SRE-friendly query.
 
-### Bypass socket
+### Bypass channel
 
-ASCII protocol, length-bounded:
+System-bus method on `org.sentinel.Agent`:
 
 ```
-client → server: ?\n
-server → client: OK\n     (approval popped, fast-path the auth)
-                  or
-                 NO\n     (no approval; client falls through to dialog)
+pam_sentinel → agent:  TakeApproval()
+agent → pam_sentinel:  true    (approval popped, fast-path the auth)
+                       or
+                       false   (no approval; fall through to the dialog)
 ```
 
 ## Compatibility matrix
 
-See [README#Compatibility](https://github.com/atayozcan/sentinel-cosmic#compatibility).
+See [README#Compatibility](https://github.com/atayozcan/sentinel#compatibility).
 The agent's autostart entry uses `NotShowIn=` to exclude desktops
 with built-in polkit agents (GNOME, KDE, XFCE, LXDE, Cinnamon, MATE,
 LXQt, Pantheon, Budgie) and lets every other compositor pick it up
