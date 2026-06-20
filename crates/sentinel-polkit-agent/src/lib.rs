@@ -19,5 +19,6 @@ pub mod bypass_service;
 pub mod helper1;
 pub mod helper_ui;
 pub mod identity;
+pub mod remember;
 pub mod session;
 pub mod subject;

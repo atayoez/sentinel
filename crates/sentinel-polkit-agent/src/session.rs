@@ -8,11 +8,12 @@
 use crate::approval_queue::ApprovalQueue;
 use crate::helper_ui;
 use crate::helper1;
+use crate::remember::RememberCache;
 use anyhow::{Context, Result};
 use log::{info, warn};
 use sentinel_shared::log_kv::quote as q;
 use sentinel_shared::logfmt_session_for_pid;
-use sentinel_shared::{Outcome, ServiceConfig};
+use sentinel_shared::{Outcome, PolicyDecision, ServiceConfig};
 use std::time::Instant;
 
 pub struct AuthInputs<'a> {
@@ -30,7 +31,115 @@ pub struct AuthInputs<'a> {
     pub requesting_user: Option<&'a str>,
 }
 
-pub async fn run(queue: ApprovalQueue, inputs: AuthInputs<'_>) -> Result<bool> {
+pub async fn run(
+    queue: ApprovalQueue,
+    remember: RememberCache,
+    inputs: AuthInputs<'_>,
+) -> Result<bool> {
+    // Static [policy] allow/deny, evaluated before the dialog. Matches
+    // on the subject's resolved exe path and/or the polkit action id;
+    // `deny` wins over `allow`. An allow short-circuits straight to the
+    // helper-1 hand-off (no dialog); a deny rejects without one.
+    match inputs
+        .cfg
+        .policy
+        .decide(inputs.process_exe, Some(inputs.action_id))
+    {
+        PolicyDecision::Deny => {
+            let process_name = inputs
+                .process_exe
+                .and_then(sentinel_shared::process_basename)
+                .unwrap_or("unknown");
+            let session = inputs
+                .process_pid
+                .map(logfmt_session_for_pid)
+                .unwrap_or_default();
+            info!(
+                "event=auth.deny source=policy user={} action={} process={}{}",
+                q(inputs.username),
+                q(inputs.action_id),
+                q(process_name),
+                session
+            );
+            if inputs.cfg.notify_on_deny {
+                sentinel_shared::desktop_notify(
+                    "Privilege request blocked",
+                    &format!("Policy denied an elevation request from {process_name}."),
+                );
+            }
+            return Ok(false);
+        }
+        PolicyDecision::Allow => {
+            let process_name = inputs
+                .process_exe
+                .and_then(sentinel_shared::process_basename)
+                .unwrap_or("unknown");
+            let session = inputs
+                .process_pid
+                .map(logfmt_session_for_pid)
+                .unwrap_or_default();
+            info!(
+                "event=auth.allow source=policy user={} action={} process={}{}",
+                q(inputs.username),
+                q(inputs.action_id),
+                q(process_name),
+                session
+            );
+            queue.push(inputs.action_id.to_string()).await;
+            let success = helper1::run(helper1::Run {
+                username: inputs.username,
+                cookie: inputs.cookie,
+            })
+            .await
+            .context("run polkit-agent-helper-1")?;
+            if !success {
+                warn!(
+                    "event=auth.error source=agent.helper1 action={} note=\"helper-1 reported FAILURE — PAM stack rejected policy approval?\"",
+                    q(inputs.action_id)
+                );
+            }
+            return Ok(success);
+        }
+        PolicyDecision::Ask => {}
+    }
+
+    // In-memory "remember" cache (the polkit-path complement to the root
+    // timestamp store, which the PAM module owns for sudo/su). A fresh
+    // grant for this (action, exe) auto-allows without a dialog.
+    if inputs.cfg.remember_seconds > 0
+        && remember
+            .is_fresh(
+                inputs.action_id,
+                inputs.process_exe,
+                inputs.cfg.remember_seconds,
+            )
+            .await
+    {
+        let process_name = inputs
+            .process_exe
+            .and_then(sentinel_shared::process_basename)
+            .unwrap_or("unknown");
+        let session = inputs
+            .process_pid
+            .map(logfmt_session_for_pid)
+            .unwrap_or_default();
+        info!(
+            "event=auth.allow source=remember user={} action={} process={}{}",
+            q(inputs.username),
+            q(inputs.action_id),
+            q(process_name),
+            session
+        );
+        queue.push(inputs.action_id.to_string()).await;
+        let success = helper1::run(helper1::Run {
+            username: inputs.username,
+            cookie: inputs.cookie,
+        })
+        .await
+        .context("run polkit-agent-helper-1")?;
+        return Ok(success);
+    }
+
     let req = helper_ui::Request::for_action(helper_ui::ForAction {
         action_id: inputs.action_id,
         cfg: inputs.cfg,
@@ -67,6 +176,12 @@ pub async fn run(queue: ApprovalQueue, inputs: AuthInputs<'_>) -> Result<bool> {
                 latency_ms,
                 session
             );
+            if inputs.cfg.notify_on_deny {
+                sentinel_shared::desktop_notify(
+                    "Authentication denied",
+                    &format!("You denied an elevation request from {process_name}."),
+                );
+            }
             return Ok(false);
         }
         Outcome::Timeout => {
@@ -78,6 +193,14 @@ pub async fn run(queue: ApprovalQueue, inputs: AuthInputs<'_>) -> Result<bool> {
                 latency_ms,
                 session
             );
+            if inputs.cfg.notify_on_timeout {
+                sentinel_shared::desktop_notify(
+                    "Authentication timed out",
+                    &format!(
+                        "An elevation request from {process_name} was auto-denied (no response)."
+                    ),
+                );
+            }
             return Ok(false);
         }
         Outcome::Allow => {
@@ -90,6 +213,14 @@ pub async fn run(queue: ApprovalQueue, inputs: AuthInputs<'_>) -> Result<bool> {
                 session
             );
         }
+    }
+
+    // Record this Allow so repeat (action, exe) requests within the
+    // window skip the dialog.
+    if inputs.cfg.remember_seconds > 0 {
+        remember
+            .remember(inputs.action_id, inputs.process_exe)
+            .await;
     }
 
     // Pre-approve before handing off to helper-1. helper-1 → PAM →

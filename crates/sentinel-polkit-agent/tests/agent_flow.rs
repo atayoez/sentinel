@@ -24,6 +24,7 @@
 
 use sentinel_polkit_agent::{
     approval_queue::ApprovalQueue,
+    remember::RememberCache,
     session::{self, AuthInputs},
 };
 use sentinel_shared::{HeadlessAction, ServiceConfig};
@@ -41,6 +42,10 @@ fn cfg() -> ServiceConfig {
         message: "test".into(),
         secondary: String::new(),
         sound_name: String::new(),
+        policy: Default::default(),
+        notify_on_deny: false,
+        notify_on_timeout: false,
+        remember_seconds: 0,
     }
 }
 
@@ -70,7 +75,12 @@ async fn serialised_session_paths() {
     let cfg = cfg();
     {
         let queue = ApprovalQueue::new();
-        let result = session::run(queue.clone(), inputs("a.allow", "ck-a", &cfg)).await;
+        let result = session::run(
+            queue.clone(),
+            RememberCache::new(),
+            inputs("a.allow", "ck-a", &cfg),
+        )
+        .await;
         assert!(result.is_ok(), "allow path: session::run should succeed");
         assert!(result.unwrap(), "allow path returns Ok(true)");
     }
@@ -85,7 +95,12 @@ async fn serialised_session_paths() {
     }
     {
         let queue = ApprovalQueue::new();
-        let result = session::run(queue.clone(), inputs("a.deny", "ck-d", &cfg)).await;
+        let result = session::run(
+            queue.clone(),
+            RememberCache::new(),
+            inputs("a.deny", "ck-d", &cfg),
+        )
+        .await;
         assert!(result.is_ok(), "deny path: session::run should succeed");
         assert!(!result.unwrap(), "deny path returns Ok(false)");
         assert!(
@@ -100,7 +115,12 @@ async fn serialised_session_paths() {
     }
     {
         let queue = ApprovalQueue::new();
-        let result = session::run(queue.clone(), inputs("a.timeout", "ck-t", &cfg)).await;
+        let result = session::run(
+            queue.clone(),
+            RememberCache::new(),
+            inputs("a.timeout", "ck-t", &cfg),
+        )
+        .await;
         assert!(result.is_ok(), "timeout path: session::run should succeed");
         assert!(!result.unwrap(), "timeout path returns Ok(false)");
         assert!(

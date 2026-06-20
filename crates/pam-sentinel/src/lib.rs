@@ -21,6 +21,7 @@ mod display;
 mod helper;
 mod locale;
 mod proc_info;
+mod timestamp;
 
 use helper::{HelperRequest, run as run_helper};
 use pam::constants::{PamFlag, PamResultCode};
@@ -29,7 +30,9 @@ use proc_info::ProcessInfo;
 use sentinel_shared::audit;
 use sentinel_shared::log_kv::quote as q;
 use sentinel_shared::logfmt_session_for_pid;
-use sentinel_shared::{HeadlessAction, Outcome, ServiceConfig, format_message, load};
+use sentinel_shared::{
+    HeadlessAction, Outcome, PolicyDecision, ServiceConfig, format_message, load,
+};
 use std::ffi::CStr;
 use std::time::Instant;
 
@@ -71,7 +74,44 @@ impl PamHooks for PamSentinel {
         }
 
         let process = ProcessInfo::for_pid(process_pid);
-        spawn_dialog(&cfg, &service, &user, &process, process_pid, requesting_uid)
+
+        // Static [policy] allow/deny, evaluated before the dialog.
+        if let Some(rc) = check_policy(&cfg, &service, &user, &process, requesting_uid) {
+            return rc;
+        }
+
+        // "Remember" window (root-owned timestamp store): a fresh grant
+        // for this (loginuid, session, service, exe) short-circuits to
+        // allow without a dialog. Bound to the login session so it can't
+        // be replayed elsewhere; see the `timestamp` module.
+        let ppid = unsafe { libc_getppid() };
+        let binding = timestamp::Binding {
+            loginuid: read_proc_u32(ppid, "loginuid"),
+            sessionid: read_proc_u32(ppid, "sessionid"),
+            service: &service,
+            exe: &process.exe,
+        };
+        if cfg.remember_seconds > 0 && timestamp::is_fresh(&binding, cfg.remember_seconds as u64) {
+            if cfg.log_attempts {
+                log::info!(
+                    "event=auth.allow source=remember user={} service={} process={} exe={} uid={}",
+                    q(&user),
+                    q(&service),
+                    q(&process.name),
+                    q(&process.exe),
+                    requesting_uid
+                );
+            }
+            return PamResultCode::PAM_SUCCESS;
+        }
+
+        let rc = spawn_dialog(&cfg, &service, &user, &process, process_pid, requesting_uid);
+        // Record the grant only on a genuine dialog Allow (policy/bypass
+        // short-circuits returned earlier, so we don't get here for them).
+        if cfg.remember_seconds > 0 && matches!(rc, PamResultCode::PAM_SUCCESS) {
+            timestamp::record(&binding);
+        }
+        rc
     }
 
     fn sm_setcred(_pamh: &mut PamHandle, _args: Vec<&CStr>, _flags: PamFlag) -> PamResultCode {
@@ -167,6 +207,40 @@ fn handle_headless(cfg: &ServiceConfig, service: &str, user: &str) -> PamResultC
             PamResultCode::PAM_IGNORE
         }
     }
+}
+
+/// Static `[policy]` allow/deny, evaluated *before* spawning the dialog.
+/// Matches on the requesting binary's resolved exe path
+/// (`/proc/<pid>/exe`) — never the spoofable `argv[0]`. Returns
+/// `Some(rc)` to short-circuit, `None` to fall through to the dialog.
+///
+/// An `allow` match is passwordless elevation (admin opt-in, like a
+/// `sudoers` NOPASSWD line); `deny` wins over `allow`.
+fn check_policy(
+    cfg: &ServiceConfig,
+    service: &str,
+    user: &str,
+    process: &ProcessInfo,
+    requesting_uid: u32,
+) -> Option<PamResultCode> {
+    let (event, rc) = match cfg.policy.decide(Some(&process.exe), None) {
+        PolicyDecision::Allow => ("auth.allow", PamResultCode::PAM_SUCCESS),
+        PolicyDecision::Deny => ("auth.deny", PamResultCode::PAM_AUTH_ERR),
+        PolicyDecision::Ask => return None,
+    };
+    if cfg.log_attempts {
+        let session = logfmt_session_for_pid(unsafe { libc_getppid() });
+        log::info!(
+            "event={event} source=policy user={} service={} process={} exe={} uid={}{}",
+            q(user),
+            q(service),
+            q(&process.name),
+            q(&process.exe),
+            requesting_uid,
+            session
+        );
+    }
+    Some(rc)
 }
 
 fn spawn_dialog(
@@ -306,4 +380,17 @@ pub(crate) fn caller_uid(ppid: i32) -> u32 {
         }
     }
     unsafe { libc_getuid() }
+}
+
+/// Read a single-`u32` `/proc/<ppid>/<field>` such as `loginuid` or
+/// `sessionid`. Returns `u32::MAX` (the kernel's "unset" sentinel) when
+/// absent or unparseable. Used to bind remember records to the session.
+fn read_proc_u32(ppid: i32, field: &str) -> u32 {
+    if ppid > 0
+        && let Ok(s) = std::fs::read_to_string(format!("/proc/{ppid}/{field}"))
+        && let Ok(v) = s.trim().parse::<u32>()
+    {
+        return v;
+    }
+    u32::MAX
 }

@@ -34,6 +34,10 @@ use std::path::{Path, PathBuf};
 
 pub mod audit;
 
+/// UI-string localization for the KDE helper (the COSMIC helper uses
+/// fluent directly). Keyed lookups mirroring the fluent bundles.
+pub mod ui_i18n;
+
 /// CLI surface shared by the helper frontends (COSMIC + Plasma). Gated
 /// behind the `cli` feature so the PAM module and polkit agent — which
 /// never parse these args — don't pull in `clap`.
@@ -146,6 +150,41 @@ pub struct Document {
     pub audio: Audio,
     #[serde(default)]
     pub services: HashMap<String, ServiceOverride>,
+    #[serde(default)]
+    pub policy: Policy,
+    #[serde(default)]
+    pub notifications: Notifications,
+}
+
+/// Desktop-notification settings (`[notifications]`). The agent posts a
+/// notification on the polkit/GUI auth path; terminal `sudo`/`su`
+/// denials are already visible in the terminal, so they're not covered.
+/// Both default off.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Notifications {
+    #[serde(default)]
+    pub on_deny: bool,
+    #[serde(default)]
+    pub on_timeout: bool,
+}
+
+/// Best-effort desktop notification via `notify-send` (libnotify). No-op
+/// if `notify-send` isn't installed or the spawn fails — never blocks or
+/// errors the auth path. Must be called from a process in the user's
+/// session (the agent), not the root PAM module.
+pub fn desktop_notify(summary: &str, body: &str) {
+    let _ = std::process::Command::new("notify-send")
+        .args([
+            "--app-name=Sentinel",
+            "--icon=system-lock-screen",
+            "--urgency=normal",
+        ])
+        .arg(summary)
+        .arg(body)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -164,6 +203,13 @@ pub struct General {
     pub log_attempts: bool,
     #[serde(default = "default_min_display_time")]
     pub min_display_time_ms: u32,
+    /// "Remember" window in seconds: after an Allow, repeat requests from
+    /// the same user+session for the same service+binary auto-allow
+    /// without a dialog for this long. `0` (default) disables it. Hard-
+    /// capped at 900s regardless of value. See the timestamp store in
+    /// `pam-sentinel` for the security model.
+    #[serde(default)]
+    pub remember_seconds: u32,
 }
 
 impl Default for General {
@@ -176,6 +222,7 @@ impl Default for General {
             show_process_info: true,
             log_attempts: true,
             min_display_time_ms: default_min_display_time(),
+            remember_seconds: 0,
         }
     }
 }
@@ -234,6 +281,80 @@ pub struct ServiceOverride {
     pub randomize: Option<bool>,
 }
 
+/// What a [`Policy`] match resolves to for a given request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyDecision {
+    /// Short-circuit to allow without showing a dialog.
+    Allow,
+    /// Short-circuit to deny without showing a dialog.
+    Deny,
+    /// No policy match — fall through to the normal dialog flow.
+    Ask,
+}
+
+/// Static allow/deny policy (`[policy]`), evaluated *before* the dialog.
+///
+/// Entries match against:
+/// - the requesting executable's **resolved path** (`/proc/<pid>/exe`,
+///   e.g. `/usr/bin/pacman`) — NOT the spoofable `argv[0]`;
+/// - that path's **basename** when the entry contains no `/`
+///   (e.g. `pacman`); or
+/// - the **polkit action id** on the agent path
+///   (e.g. `org.freedesktop.color-manager.create-profile`).
+///
+/// `deny` takes precedence over `allow` (fail-safe). An empty policy
+/// (the default) never matches, so behaviour is unchanged until an
+/// admin opts in.
+///
+/// # Security
+///
+/// An `allow` entry means **passwordless elevation** for that target —
+/// it is exactly as load-bearing as a `sudoers` `NOPASSWD` line. Prefer
+/// absolute paths over basenames, and keep the list short.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Policy {
+    #[serde(default)]
+    pub allow: Vec<String>,
+    #[serde(default)]
+    pub deny: Vec<String>,
+}
+
+impl Policy {
+    /// Decide an outcome for a request identified by its resolved exe
+    /// path (always available) and optional polkit action id (agent
+    /// path only). `deny` wins over `allow`.
+    pub fn decide(&self, exe: Option<&str>, action: Option<&str>) -> PolicyDecision {
+        if Self::list_matches(&self.deny, exe, action) {
+            PolicyDecision::Deny
+        } else if Self::list_matches(&self.allow, exe, action) {
+            PolicyDecision::Allow
+        } else {
+            PolicyDecision::Ask
+        }
+    }
+
+    fn list_matches(list: &[String], exe: Option<&str>, action: Option<&str>) -> bool {
+        list.iter().any(|entry| {
+            // Exact polkit action id.
+            if action == Some(entry.as_str()) {
+                return true;
+            }
+            match exe {
+                Some(path) => {
+                    if entry.contains('/') {
+                        // Absolute/relative path: full-path match only.
+                        entry == path
+                    } else {
+                        // Bare name: match the exe's basename.
+                        process_basename(path) == Some(entry.as_str())
+                    }
+                }
+                None => false,
+            }
+        })
+    }
+}
+
 /// Effective config for a single PAM service after applying overrides
 /// on top of `[general]` + `[appearance]` + `[audio]`. This is what
 /// consumers actually drive the dialog with.
@@ -253,6 +374,17 @@ pub struct ServiceConfig {
     /// consumers don't need a second config read; the value isn't
     /// per-service overridable (audio is a global UX choice).
     pub sound_name: String,
+    /// Static allow/deny policy from `[policy]`, evaluated before the
+    /// dialog. Not per-service overridable.
+    pub policy: Policy,
+    /// Post a desktop notification when this request is denied
+    /// (`[notifications].on_deny`). Agent/polkit path only.
+    pub notify_on_deny: bool,
+    /// Post a desktop notification when this request times out
+    /// (`[notifications].on_timeout`).
+    pub notify_on_timeout: bool,
+    /// `[general].remember_seconds` — auto-allow window (0 = off).
+    pub remember_seconds: u32,
 }
 
 impl Document {
@@ -262,6 +394,8 @@ impl Document {
             appearance: Appearance::default(),
             audio: Audio::default(),
             services: HashMap::new(),
+            policy: Policy::default(),
+            notifications: Notifications::default(),
         }
     }
 
@@ -281,6 +415,10 @@ impl Document {
             message: self.appearance.message.clone(),
             secondary: self.appearance.secondary.clone(),
             sound_name: self.audio.sound_name.clone(),
+            policy: self.policy.clone(),
+            notify_on_deny: self.notifications.on_deny,
+            notify_on_timeout: self.notifications.on_timeout,
+            remember_seconds: self.general.remember_seconds,
         };
         if let Some(over) = self.services.get(service) {
             if let Some(v) = over.enabled {
@@ -810,6 +948,86 @@ fn default_secondary() -> String {
 mod tests {
     use super::*;
 
+    // ---- Policy -----------------------------------------------------------
+
+    fn policy(allow: &[&str], deny: &[&str]) -> Policy {
+        Policy {
+            allow: allow.iter().map(|s| s.to_string()).collect(),
+            deny: deny.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn policy_empty_always_asks() {
+        let p = Policy::default();
+        assert_eq!(p.decide(Some("/usr/bin/pacman"), None), PolicyDecision::Ask);
+        assert_eq!(
+            p.decide(Some("/usr/bin/x"), Some("org.example.act")),
+            PolicyDecision::Ask
+        );
+    }
+
+    #[test]
+    fn policy_allow_matches_basename_and_full_path() {
+        let p = policy(&["pacman", "/usr/bin/topgrade"], &[]);
+        assert_eq!(
+            p.decide(Some("/usr/bin/pacman"), None),
+            PolicyDecision::Allow
+        );
+        assert_eq!(
+            p.decide(Some("/usr/bin/topgrade"), None),
+            PolicyDecision::Allow
+        );
+        // basename entry must not match a different path's basename
+        assert_eq!(
+            p.decide(Some("/opt/evil/pacman"), None),
+            PolicyDecision::Allow
+        );
+        // full-path entry must not match by basename alone
+        assert_eq!(p.decide(Some("/opt/topgrade"), None), PolicyDecision::Ask);
+    }
+
+    #[test]
+    fn policy_deny_wins_over_allow() {
+        let p = policy(&["pacman"], &["pacman"]);
+        assert_eq!(
+            p.decide(Some("/usr/bin/pacman"), None),
+            PolicyDecision::Deny
+        );
+    }
+
+    #[test]
+    fn policy_matches_polkit_action_id() {
+        let p = policy(&["org.freedesktop.policykit.exec"], &[]);
+        assert_eq!(
+            p.decide(
+                Some("/usr/bin/pkexec"),
+                Some("org.freedesktop.policykit.exec")
+            ),
+            PolicyDecision::Allow
+        );
+        // action-only entry, no exe match
+        assert_eq!(p.decide(Some("/usr/bin/other"), None), PolicyDecision::Ask);
+    }
+
+    #[test]
+    fn policy_parses_from_toml() {
+        let doc: Document = toml::from_str(
+            r#"
+            [policy]
+            allow = ["pacman", "/usr/bin/topgrade"]
+            deny = ["org.freedesktop.systemd1.manage-units"]
+            "#,
+        )
+        .unwrap();
+        assert_eq!(doc.policy.allow.len(), 2);
+        assert_eq!(
+            doc.policy
+                .decide(None, Some("org.freedesktop.systemd1.manage-units")),
+            PolicyDecision::Deny
+        );
+    }
+
     // ---- format_message ---------------------------------------------------
 
     #[test]
@@ -856,6 +1074,8 @@ mod tests {
             appearance: Appearance::default(),
             audio: Audio::default(),
             services,
+            policy: Policy::default(),
+            notifications: Notifications::default(),
         }
     }
 
