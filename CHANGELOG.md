@@ -8,6 +8,23 @@ The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/), with version numbers
 following [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] — 2026-06-20
+
+Packaging-only release — no changes to runtime behaviour, config, or the
+auth path.
+
+- **AUR build fixed** — the KDE `package()` installed `config/su`, a PAM
+  reference doc that was never committed, so `sentinel-kde 0.10.0` failed
+  in `package()` for everyone. It's now shipped (mirrors `config/sudo`).
+- **Per-frontend cargo target isolation** — `build()` now uses explicit
+  `-p` target lists instead of `--workspace --exclude`, so the KDE package
+  no longer compiles the COSMIC/libcosmic stack (and vice versa). The leak
+  came via `check()`'s `--workspace -p …`, where `--workspace` overrode the
+  `-p` filter and pulled the whole workspace into the test build.
+- **Dropped `check()` from both PKGBUILDs** — fmt/clippy/test run in CI on
+  every push and the AUR publish is gated on a green release, so re-running
+  `cargo test` on each install was redundant compile time.
+
 ## [0.10.0] — 2026-06-20
 
 New opt-in features (all default off, so existing configs are unchanged):
