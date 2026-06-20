@@ -44,7 +44,9 @@ error() { printf "${RED}error:${NC} %s\n" "$*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || error "Run as root (use pkexec or sudo)."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# Run from the workspace root: cargo's target/ and the shared config/ live
+# there; KDE-specific packaging is under packaging-kde/ (= $SCRIPT_DIR).
+cd "$SCRIPT_DIR/.."
 
 PREFIX=${PREFIX:-/usr}
 SYSCONFDIR=${SYSCONFDIR:-/etc}
@@ -265,7 +267,7 @@ install_file 644 config/sentinel.conf                 "$SYSCONFDIR/security/sent
 wire_pam_service polkit-1
 
 # systemd *user* unit for the agent (registers cleanly on Plasma 6).
-install_file 644 packaging/systemd/user/sentinel-polkit-agent.service \
+install_file 644 packaging-kde/packaging/systemd/user/sentinel-polkit-agent.service \
     "$PREFIX/lib/systemd/user/sentinel-polkit-agent.service"
 
 # Bypass channel = the system D-Bus. The agent claims org.sentinel.Agent and
@@ -274,7 +276,7 @@ install_file 644 packaging/systemd/user/sentinel-polkit-agent.service \
 # `policykit_t -> userdomain dbus send_msg` allow (same path pam_fprintd
 # uses), so NO custom SELinux/AppArmor policy and NO polkit.service override
 # are needed. This D-Bus policy lets the user own the name + lets root call it.
-install_file 644 packaging/dbus/org.sentinel.Agent.conf \
+install_file 644 packaging-kde/packaging/dbus/org.sentinel.Agent.conf \
     "$PREFIX/share/dbus-1/system.d/org.sentinel.Agent.conf"
 # Reload the system bus so it picks up the new policy before the agent (below)
 # tries to claim the name. reload (SIGHUP), not restart — no client disconnects.
@@ -323,8 +325,8 @@ install_file 644 "$GEN_DIR/c.bash" "$PREFIX/share/bash-completion/completions/se
 install_file 644 "$GEN_DIR/c.fish" "$PREFIX/share/fish/vendor_completions.d/sentinel-polkit-agent.fish"
 install_file 644 "$GEN_DIR/_c"     "$PREFIX/share/zsh/site-functions/_sentinel-polkit-agent"
 install_file 644 "$GEN_DIR/c.1"    "$PREFIX/share/man/man1/sentinel-polkit-agent.1"
-install_file 644 packaging/man/sentinel.conf.5 "$PREFIX/share/man/man5/sentinel.conf.5"
-install_file 644 packaging/man/pam_sentinel.8  "$PREFIX/share/man/man8/pam_sentinel.8"
+install_file 644 packaging-kde/packaging/man/sentinel.conf.5 "$PREFIX/share/man/man5/sentinel.conf.5"
+install_file 644 packaging-kde/packaging/man/pam_sentinel.8  "$PREFIX/share/man/man8/pam_sentinel.8"
 rm -rf "$GEN_DIR"
 
 # -------------- verify -----------------------------------------------------
