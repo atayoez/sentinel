@@ -44,11 +44,40 @@ pub fn translate(key: &str, lang: &str) -> &'static str {
     let localized = match lang {
         "de" => de(key),
         "es" => es(key),
+        "fr" => fr(key),
+        "it" => it(key),
+        "ja" => ja(key),
+        "nl" => nl(key),
+        "pl" => pl(key),
+        "pt" => pt(key),
+        "ru" => ru(key),
+        "tr" => tr(key),
+        "zh" => zh(key),
         _ => None,
     };
     // Localized → English source → a visible marker for an unknown key
     // (`key` isn't `'static`, so we can't echo it back here).
     localized.or_else(|| en(key)).unwrap_or("?")
+}
+
+/// Localized template for the "remember" opt-in checkbox. `%1` is the
+/// Qt placeholder the helper replaces with a human duration (e.g.
+/// `5 min`). Falls back to English for an unlisted locale.
+pub fn remember_label_template(lang: &str) -> &'static str {
+    match lang {
+        "de" => "Für %1 merken",
+        "es" => "Recordar durante %1",
+        "fr" => "Mémoriser pendant %1",
+        "it" => "Ricorda per %1",
+        "ja" => "%1 記憶する",
+        "nl" => "Onthouden voor %1",
+        "pl" => "Zapamiętaj na %1",
+        "pt" => "Lembrar por %1",
+        "ru" => "Запомнить на %1",
+        "tr" => "%1 boyunca hatırla",
+        "zh" => "在 %1 内记住",
+        _ => "Remember for %1",
+    }
 }
 
 fn en(key: &str) -> Option<&'static str> {
@@ -102,6 +131,159 @@ fn es(key: &str) -> Option<&'static str> {
     })
 }
 
+fn fr(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "allow" => "Autoriser",
+        "deny" => "Refuser",
+        "show-details" => "Afficher les détails",
+        "hide-details" => "Masquer les détails",
+        "auto-deny-in" => "Refus automatique dans %1 s",
+        "title-default" => "Authentification requise",
+        "detail-action" => "Action",
+        "detail-command" => "Commande",
+        "detail-pid" => "PID",
+        "detail-requested-by" => "Demandé par",
+        "detail-cwd" => "Répertoire de travail",
+        _ => return None,
+    })
+}
+
+fn it(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "allow" => "Consenti",
+        "deny" => "Nega",
+        "show-details" => "Mostra dettagli",
+        "hide-details" => "Nascondi dettagli",
+        "auto-deny-in" => "Negazione automatica fra %1 s",
+        "title-default" => "Autenticazione richiesta",
+        "detail-action" => "Azione",
+        "detail-command" => "Comando",
+        "detail-pid" => "PID",
+        "detail-requested-by" => "Richiesto da",
+        "detail-cwd" => "Directory di lavoro",
+        _ => return None,
+    })
+}
+
+fn ja(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "allow" => "許可",
+        "deny" => "拒否",
+        "show-details" => "詳細を表示",
+        "hide-details" => "詳細を非表示",
+        "auto-deny-in" => "%1 秒後に自動的に拒否されます",
+        "title-default" => "認証が必要です",
+        "detail-action" => "アクション",
+        "detail-command" => "コマンド",
+        "detail-pid" => "PID",
+        "detail-requested-by" => "要求元",
+        "detail-cwd" => "作業ディレクトリ",
+        _ => return None,
+    })
+}
+
+fn nl(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "allow" => "Toestaan",
+        "deny" => "Weigeren",
+        "show-details" => "Details tonen",
+        "hide-details" => "Details verbergen",
+        "auto-deny-in" => "Automatisch weigeren over %1 s",
+        "title-default" => "Verificatie vereist",
+        "detail-action" => "Actie",
+        "detail-command" => "Opdracht",
+        "detail-pid" => "PID",
+        "detail-requested-by" => "Aangevraagd door",
+        "detail-cwd" => "Werkmap",
+        _ => return None,
+    })
+}
+
+fn pl(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "allow" => "Zezwól",
+        "deny" => "Odmów",
+        "show-details" => "Pokaż szczegóły",
+        "hide-details" => "Ukryj szczegóły",
+        "auto-deny-in" => "Automatyczna odmowa za %1 s",
+        "title-default" => "Wymagane uwierzytelnienie",
+        "detail-action" => "Akcja",
+        "detail-command" => "Polecenie",
+        "detail-pid" => "PID",
+        "detail-requested-by" => "Żąda",
+        "detail-cwd" => "Katalog roboczy",
+        _ => return None,
+    })
+}
+
+fn pt(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "allow" => "Permitir",
+        "deny" => "Negar",
+        "show-details" => "Mostrar detalhes",
+        "hide-details" => "Ocultar detalhes",
+        "auto-deny-in" => "Negação automática em %1 s",
+        "title-default" => "Autenticação necessária",
+        "detail-action" => "Ação",
+        "detail-command" => "Comando",
+        "detail-pid" => "PID",
+        "detail-requested-by" => "Solicitado por",
+        "detail-cwd" => "Diretório de trabalho",
+        _ => return None,
+    })
+}
+
+fn ru(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "allow" => "Разрешить",
+        "deny" => "Запретить",
+        "show-details" => "Показать подробности",
+        "hide-details" => "Скрыть подробности",
+        "auto-deny-in" => "Автоматический отказ через %1 с",
+        "title-default" => "Требуется аутентификация",
+        "detail-action" => "Действие",
+        "detail-command" => "Команда",
+        "detail-pid" => "PID",
+        "detail-requested-by" => "Запросил",
+        "detail-cwd" => "Рабочий каталог",
+        _ => return None,
+    })
+}
+
+fn tr(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "allow" => "İzin Ver",
+        "deny" => "Reddet",
+        "show-details" => "Ayrıntıları göster",
+        "hide-details" => "Ayrıntıları gizle",
+        "auto-deny-in" => "%1 sn sonra otomatik reddedilecek",
+        "title-default" => "Kimlik Doğrulama Gerekli",
+        "detail-action" => "İşlem",
+        "detail-command" => "Komut",
+        "detail-pid" => "PID",
+        "detail-requested-by" => "İsteyen kullanıcı",
+        "detail-cwd" => "Çalışma dizini",
+        _ => return None,
+    })
+}
+
+fn zh(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "allow" => "允许",
+        "deny" => "拒绝",
+        "show-details" => "显示详情",
+        "hide-details" => "隐藏详情",
+        "auto-deny-in" => "%1 秒后自动拒绝",
+        "title-default" => "需要身份验证",
+        "detail-action" => "操作",
+        "detail-command" => "命令",
+        "detail-pid" => "PID",
+        "detail-requested-by" => "请求者",
+        "detail-cwd" => "工作目录",
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,8 +308,23 @@ mod tests {
 
     #[test]
     fn every_locale_covers_all_keys() {
-        // De/es must define exactly the English key set — guards against a
-        // missing translation silently falling back.
+        // Each locale must define the full English key set — guards against
+        // a missing translation silently falling back to English.
+        type LocaleFn = fn(&str) -> Option<&'static str>;
+        let locales: &[(&str, LocaleFn)] = &[
+            ("en", en),
+            ("de", de),
+            ("es", es),
+            ("fr", fr),
+            ("it", it),
+            ("ja", ja),
+            ("nl", nl),
+            ("pl", pl),
+            ("pt", pt),
+            ("ru", ru),
+            ("tr", tr),
+            ("zh", zh),
+        ];
         for key in [
             "allow",
             "deny",
@@ -141,9 +338,18 @@ mod tests {
             "detail-requested-by",
             "detail-cwd",
         ] {
-            assert!(en(key).is_some(), "en missing {key}");
-            assert!(de(key).is_some(), "de missing {key}");
-            assert!(es(key).is_some(), "es missing {key}");
+            for (name, f) in locales {
+                assert!(f(key).is_some(), "{name} missing {key}");
+            }
+            // count placeholder must survive in every locale's auto-deny-in
+            if key == "auto-deny-in" {
+                for (name, f) in locales {
+                    assert!(
+                        f(key).unwrap().contains("%1"),
+                        "{name} auto-deny-in lost %1"
+                    );
+                }
+            }
         }
     }
 
