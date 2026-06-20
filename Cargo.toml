@@ -30,7 +30,7 @@ serde = { version = "1", features = ["derive"] }
 toml = "1.1.2"
 log = "0.4"
 syslog = "7"
-nix = { version = "0.31.3", features = ["fs", "process", "user", "poll", "signal"] }
+nix = { version = "0.31.3", features = ["fs", "process", "user", "poll", "signal", "time"] }
 anyhow = "1"
 thiserror = "2"
 

@@ -195,6 +195,13 @@ pub struct General {
     pub log_attempts: bool,
     #[serde(default = "default_min_display_time")]
     pub min_display_time_ms: u32,
+    /// "Remember" window in seconds: after an Allow, repeat requests from
+    /// the same user+session for the same service+binary auto-allow
+    /// without a dialog for this long. `0` (default) disables it. Hard-
+    /// capped at 900s regardless of value. See the timestamp store in
+    /// `pam-sentinel` for the security model.
+    #[serde(default)]
+    pub remember_seconds: u32,
 }
 
 impl Default for General {
@@ -207,6 +214,7 @@ impl Default for General {
             show_process_info: true,
             log_attempts: true,
             min_display_time_ms: default_min_display_time(),
+            remember_seconds: 0,
         }
     }
 }
@@ -367,6 +375,8 @@ pub struct ServiceConfig {
     /// Post a desktop notification when this request times out
     /// (`[notifications].on_timeout`).
     pub notify_on_timeout: bool,
+    /// `[general].remember_seconds` — auto-allow window (0 = off).
+    pub remember_seconds: u32,
 }
 
 impl Document {
@@ -400,6 +410,7 @@ impl Document {
             policy: self.policy.clone(),
             notify_on_deny: self.notifications.on_deny,
             notify_on_timeout: self.notifications.on_timeout,
+            remember_seconds: self.general.remember_seconds,
         };
         if let Some(over) = self.services.get(service) {
             if let Some(v) = over.enabled {

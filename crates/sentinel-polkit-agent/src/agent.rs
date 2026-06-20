@@ -25,6 +25,8 @@ pub struct Agent {
     /// guard. Polkit doesn't pipeline BeginAuthentication in practice,
     /// so this is invisible to the user.
     inflight: Arc<Mutex<()>>,
+    /// In-memory remember cache for the polkit path (see `remember`).
+    remember: crate::remember::RememberCache,
 }
 
 impl Agent {
@@ -34,6 +36,7 @@ impl Agent {
             queue,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             inflight: Arc::new(Mutex::new(())),
+            remember: crate::remember::RememberCache::new(),
         }
     }
 }
@@ -177,9 +180,11 @@ impl Agent {
         // to the cleanup step.
         let (done_tx, done_rx) = oneshot::channel::<()>();
 
+        let remember = self.remember.clone();
         let handle = tokio::spawn(async move {
             let _ = session::run(
                 queue,
+                remember,
                 AuthInputs {
                     action_id: &action_for_task,
                     cookie: &cookie_for_task,
