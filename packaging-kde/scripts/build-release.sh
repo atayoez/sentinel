@@ -28,7 +28,7 @@ mkdir -p "$DIST"
 echo "==> Building release ($VERSION, $ARCH)…"
 SENTINEL_PREFIX=/usr SENTINEL_SYSCONFDIR=/etc SENTINEL_LIBEXECDIR=lib \
 SENTINEL_HELPER_PATH=/usr/lib/sentinel-helper-kde \
-    cargo build --release --workspace --locked
+    cargo build --release --workspace --exclude sentinel-helper --locked
 
 # ---------------------------------------------------------------------------
 # Source tarball — generated only on the primary arch (git archive is
