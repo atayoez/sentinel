@@ -5,6 +5,7 @@ members = [
     "crates/sentinel-shared",
     "crates/sentinel-polkit-agent",
     "crates/sentinel-broker-proto", # typed shim <-> broker IPC protocol
+    "crates/sentinel-broker",       # sandboxed remember-decision daemon
     "crates/sentinel-helper",       # COSMIC / libcosmic frontend
     "crates/sentinel-helper-kde",   # KDE Plasma / Kirigami frontend
 ]
@@ -31,7 +32,7 @@ serde = { version = "1", features = ["derive"] }
 toml = "1.1.2"
 log = "0.4"
 syslog = "7"
-nix = { version = "0.31.3", features = ["fs", "process", "user", "poll", "signal", "time"] }
+nix = { version = "0.31.3", features = ["fs", "process", "user", "poll", "signal", "time", "socket"] }
 anyhow = "1"
 thiserror = "2"
 postcard = { version = "1", features = ["use-std"] }

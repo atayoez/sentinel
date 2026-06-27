@@ -56,7 +56,17 @@ following [Semantic Versioning](https://semver.org/).
   (`pam_sss`/OpenSSH-monitor model). Compact `postcard` messages with a
   length-prefixed, `MAX_FRAME_LEN`-bounded codec (no OOM on a hostile
   length), fail-closed semantics, and a `broker_proto` fuzz target. The
-  broker daemon and the shim rewire are the next increments.
+  shim rewire is the next increment.
+- **Privilege-separation broker — daemon (`sentinel-broker`).** The
+  remember decision + grant store now have a home outside the privileged
+  binary: a long-lived, **unprivileged** daemon (systemd `DynamicUser=`)
+  serving root-only peers over a Unix socket (`SO_PEERCRED` uid-0 gate),
+  `#![forbid(unsafe_code)]`, hardened unit (seccomp `@system-service`, no
+  caps, `ProtectSystem=strict`, `AF_UNIX`-only). The store is **in
+  memory**, which subsumes the on-disk HMAC-integrity work (T3b): no file
+  to forge or roll back, monotonic-clock freshness, grants evaporate on
+  stop. Keyed by the full command (the argv-binding guarantee holds here
+  too).
 
 ## [0.11.1] — 2026-06-20
 

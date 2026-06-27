@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Atay Özcan <atay@oezcan.me>
+# SPDX-License-Identifier: GPL-3.0-or-later
+[package]
+name = "sentinel-broker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "sentinel-broker"
+path = "src/main.rs"
+
+[dependencies]
+sentinel-broker-proto = { path = "../sentinel-broker-proto" }
+nix = { workspace = true }
