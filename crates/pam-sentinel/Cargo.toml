@@ -15,6 +15,7 @@ crate-type = ["cdylib"]
 [dependencies]
 pam-bindings = "0.3"
 sentinel-shared = { path = "../sentinel-shared" }
+sentinel-broker-proto = { path = "../sentinel-broker-proto" }
 log.workspace = true
 nix.workspace = true
 # Blocking system-bus client for the agent bypass handshake (pure Rust, no

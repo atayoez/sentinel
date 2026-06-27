@@ -55,8 +55,7 @@ following [Semantic Versioning](https://semver.org/).
   contract for a future thin PAM shim → sandboxed root broker
   (`pam_sss`/OpenSSH-monitor model). Compact `postcard` messages with a
   length-prefixed, `MAX_FRAME_LEN`-bounded codec (no OOM on a hostile
-  length), fail-closed semantics, and a `broker_proto` fuzz target. The
-  shim rewire is the next increment.
+  length), fail-closed semantics, and a `broker_proto` fuzz target.
 - **Privilege-separation broker — daemon (`sentinel-broker`).** The
   remember decision + grant store now have a home outside the privileged
   binary: a long-lived, **unprivileged** daemon (systemd `DynamicUser=`)
@@ -67,6 +66,14 @@ following [Semantic Versioning](https://semver.org/).
   to forge or roll back, monotonic-clock freshness, grants evaporate on
   stop. Keyed by the full command (the argv-binding guarantee holds here
   too).
+- **Privilege-separation broker — PAM shim rewire.** `pam_sentinel` no
+  longer keeps a root timestamp store of its own: it now **relays** the
+  remember decision to `sentinel-broker` over the Unix socket
+  (`broker_client`), and the on-disk `/run/sentinel/ts` store
+  (`timestamp.rs`) is **removed**. Fail-closed: an unreachable broker
+  means "show the dialog", never "let in". `install.sh`/`uninstall.sh`
+  now deploy + enable (and tear down) the broker unit. This completes the
+  privilege-separation split — the root PAM module holds no grant state.
 
 ## [0.11.1] — 2026-06-20
 

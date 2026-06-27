@@ -3842,6 +3842,7 @@ dependencies = [
  "log",
  "nix",
  "pam-bindings",
+ "sentinel-broker-proto",
  "sentinel-shared",
  "zbus",
 ]

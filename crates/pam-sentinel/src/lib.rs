@@ -30,16 +30,17 @@
 #![deny(unsafe_code)]
 
 mod agent_bypass;
+mod broker_client;
 mod display;
 mod helper;
 mod locale;
 mod proc_info;
-mod timestamp;
 
 use helper::{HelperRequest, run as run_helper};
 use pam::constants::{PamFlag, PamResultCode};
 use pam::module::{PamHandle, PamHooks};
 use proc_info::ProcessInfo;
+use sentinel_broker_proto::RememberKey;
 use sentinel_shared::audit;
 use sentinel_shared::log_kv::quote as q;
 use sentinel_shared::logfmt_session_for_pid;
@@ -93,29 +94,30 @@ impl PamHooks for PamSentinel {
             return rc;
         }
 
-        // "Remember" window (root-owned timestamp store): a fresh grant
-        // for this (loginuid, session, service, FULL command) short-
-        // circuits to allow without a dialog. The grant binds to the
-        // whole elevated command — not just the program — and excludes
-        // bare-elevation root shells and arbitrary-code gateways, so a
-        // grant for `sudo pacman -Syu` can't auto-allow
-        // `sudo pacman -U /tmp/evil` (see `ProcessInfo::remember_command`).
-        // `None` means this request is not rememberable: skip the store
-        // entirely (always dialog, never record). Bound to the login
-        // session so it can't be replayed elsewhere; see `timestamp`.
+        // "Remember" window: a fresh grant for this (loginuid, session,
+        // service, FULL command) short-circuits to allow without a dialog.
+        // The decision is owned by the sandboxed, unprivileged
+        // `sentinel-broker` daemon (see `broker_client`) — this module no
+        // longer keeps a root store of its own. The grant binds to the
+        // whole elevated command (not just the program) and excludes
+        // bare-elevation root shells / arbitrary-code gateways, so a grant
+        // for `sudo pacman -Syu` can't auto-allow `sudo pacman -U /tmp/evil`
+        // (see `ProcessInfo::remember_command`). `None` = not rememberable
+        // (always dialog, never record). Fail-closed: an unreachable broker
+        // means "show the dialog", never "let in".
         let ppid = getppid();
-        let binding = process
+        let remember_key = process
             .remember_command
             .as_deref()
-            .map(|command| timestamp::Binding {
+            .map(|command| RememberKey {
                 loginuid: read_proc_u32(ppid, "loginuid"),
                 sessionid: read_proc_u32(ppid, "sessionid"),
-                service: &service,
-                command,
+                service: service.clone(),
+                command: command.to_string(),
             });
         if cfg.remember_seconds > 0 {
-            if let Some(b) = &binding {
-                if timestamp::is_fresh(b, cfg.remember_seconds as u64) {
+            if let Some(key) = &remember_key {
+                if broker_client::check_remember(key.clone(), cfg.remember_seconds) {
                     if cfg.log_attempts {
                         log::info!(
                             "event=auth.allow source=remember user={} service={} process={} exe={} uid={}",
@@ -136,10 +138,10 @@ impl PamHooks for PamSentinel {
         // Record the grant only when the user ticked the "remember"
         // checkbox (the helper sets this on an opt-in Allow), not on every
         // allow. `remember_seconds == 0` hides the checkbox, and a
-        // non-rememberable request has no binding, so neither can record.
+        // non-rememberable request has no key, so neither can record.
         if remember && cfg.remember_seconds > 0 {
-            if let Some(b) = &binding {
-                timestamp::record(b);
+            if let Some(key) = remember_key {
+                broker_client::record_remember(key);
             }
         }
         rc

@@ -139,6 +139,7 @@ fi
 
 [[ -f target/release/sentinel-helper       ]] || error "Build artifact missing: target/release/sentinel-helper"
 [[ -f target/release/sentinel-polkit-agent ]] || error "Build artifact missing: target/release/sentinel-polkit-agent"
+[[ -f target/release/sentinel-broker       ]] || error "Build artifact missing: target/release/sentinel-broker"
 [[ -f target/release/libpam_sentinel.so    ]] || error "Build artifact missing: target/release/libpam_sentinel.so"
 
 # -------------- install ----------------------------------------------------
@@ -151,6 +152,7 @@ step "Installing system files…"
 # Binaries.
 install_file 755 target/release/sentinel-helper       "$PREFIX/$LIBEXECDIR/sentinel-helper"
 install_file 755 target/release/sentinel-polkit-agent "$PREFIX/$LIBEXECDIR/sentinel-polkit-agent"
+install_file 755 target/release/sentinel-broker       "$PREFIX/$LIBEXECDIR/sentinel-broker"
 
 # pam_sentinel.so requires the execute bit (0755) — under
 # polkit-agent-helper@.service's sandbox (NoNewPrivileges + various
@@ -181,6 +183,19 @@ systemctl reload dbus.service 2>/dev/null || systemctl reload dbus-broker.servic
 # sandbox and pam_sentinel.so can't reach the agent's bypass socket.
 install_file 644 packaging/systemd/polkit-agent-helper@.service.d/sentinel.conf \
     "$SYSCONFDIR/systemd/system/polkit-agent-helper@.service.d/sentinel.conf"
+
+# Remember-decision broker: a sandboxed, unprivileged daemon that owns the
+# remember grant store out-of-process; pam_sentinel relays to it over a
+# Unix socket (fail-closed if it's down). ExecStart is templated to the
+# chosen libexec dir.
+BROKER_UNIT_TMP="$(mktemp)"
+sed "s|@LIBEXEC@|$PREFIX/$LIBEXECDIR|" packaging/systemd/sentinel-broker.service > "$BROKER_UNIT_TMP"
+install_file 644 "$BROKER_UNIT_TMP" "$SYSCONFDIR/systemd/system/sentinel-broker.service"
+rm -f "$BROKER_UNIT_TMP"
+# Enable+start now when systemd is the init (skipped cleanly in containers
+# / chroots — the unit is still installed for the next boot).
+systemctl daemon-reload 2>/dev/null || true
+systemctl enable --now sentinel-broker.service 2>/dev/null || true
 
 # Optional /etc/pam.d/sudo. Off by default; opt in with --enable-sudo.
 if [[ $INSTALL_SUDO -eq 1 ]]; then

@@ -73,6 +73,11 @@ stop_polkit_agent() {
 }
 stop_polkit_agent
 
+# -------------- stop broker daemon ----------------------------------------
+# Disable + stop the broker before its unit and binary are removed below.
+# Guarded so it's a no-op on non-systemd / container environments.
+systemctl disable --now sentinel-broker.service 2>/dev/null || true
+
 # -------------- state-file driven uninstall --------------------------------
 
 if [[ -f "$STATE_FILE" ]]; then
@@ -125,10 +130,12 @@ FALLBACK_PATHS=(
     "$PREFIX/lib/security/pam_sentinel.so"
     "$PREFIX/$LIBEXECDIR/sentinel-helper"
     "$PREFIX/$LIBEXECDIR/sentinel-polkit-agent"
+    "$PREFIX/$LIBEXECDIR/sentinel-broker"
     "$SYSCONFDIR/security/sentinel.conf"
     "$SYSCONFDIR/pam.d/polkit-1"
     "$SYSCONFDIR/xdg/autostart/sentinel-polkit-agent.desktop"
     "$SYSCONFDIR/systemd/system/polkit-agent-helper@.service.d/sentinel.conf"
+    "$SYSCONFDIR/systemd/system/sentinel-broker.service"
     "$PREFIX/share/man/man1/sentinel-helper.1"
     "$PREFIX/share/man/man1/sentinel-polkit-agent.1"
     "$PREFIX/share/man/man5/sentinel.conf.5"

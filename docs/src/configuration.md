@@ -34,10 +34,13 @@ GUI path keys on `(action, binary)`, and the terminal path keys on the
 `sudo pacman -U /tmp/evil`) — never a blanket allow. It is enforced by
 two trust-appropriate backends:
 
-- **sudo / su** (PAM module, root): a record in `/run/sentinel/ts`, a
-  root-owned `0700` tmpfs dir. Freshness uses `CLOCK_BOOTTIME` stored in
-  the record (so moving the wall clock can't extend it), and tmpfs is
-  wiped on reboot, so no grant survives a reboot.
+- **sudo / su** (PAM path): the `pam_sentinel` module relays the decision
+  to the **`sentinel-broker`** daemon — a sandboxed, *unprivileged*
+  service that holds grants **in memory** (no on-disk artifact to forge or
+  roll back) and serves only root peers over a Unix socket. Grants
+  evaporate when the broker stops, and the module is **fail-closed**: if
+  the broker is unreachable, you simply get the dialog. (Installed and
+  enabled by `install.sh`.)
 - **polkit / GUI** (agent, per-user): an in-memory cache that evaporates
   on logout (the agent restarts with the session).
 
