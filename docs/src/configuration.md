@@ -19,14 +19,16 @@ own `timeout` to zero.
 | `show_process_info` | bool | `true` | Display the requesting process's exe/cmdline in the dialog. |
 | `log_attempts` | bool | `true` | Log every allow/deny/timeout to syslog (`auth.info`). |
 | `min_display_time_ms` | uint | `500` | Disable the Allow button for this many ms after the dialog appears, blocking instant scripted clicks. |
-| `remember_seconds` | uint | `0` | "Remember" window. When non-zero, the dialog shows a **"Remember for N min" checkbox**; tick it and Allow to let repeat requests from the **same login session** for the **same service + binary** skip the dialog for this many seconds. `0` (default) hides the checkbox; hard-capped at `900`. See [below](#remember-window). |
+| `remember_seconds` | uint | `0` | "Remember" window. When non-zero, the dialog shows a **"Remember for N min" checkbox**; tick it and Allow to let repeat requests from the **same login session** for the **same service + full command** skip the dialog for this many seconds. `0` (default) hides the checkbox; hard-capped at `900`. See [below](#remember-window). |
 
 <a id="remember-window"></a>
 **The remember window** is a `sudo`-timestamp analogue, opt-in **per
 request** via a dialog checkbox (not a silent global). A grant is bound
 to your `loginuid` **and** kernel audit `sessionid`, so it can't be
-replayed in another session or by another user, and is scoped to the
-exact `(service, exe)` it was granted for — never a blanket allow. It is
+replayed in another session or by another user. On the terminal path it
+is scoped to the exact `(service, full command)` it was granted for —
+the **whole** command, not just the program — so a grant for
+`sudo pacman -Syu` can never auto-allow `sudo pacman -U /tmp/evil`. It is
 enforced by two trust-appropriate backends:
 
 - **sudo / su** (PAM module, root): a record in `/run/sentinel/ts`, a
@@ -35,6 +37,13 @@ enforced by two trust-appropriate backends:
   wiped on reboot, so no grant survives a reboot.
 - **polkit / GUI** (agent, per-user): an in-memory cache that evaporates
   on logout (the agent restarts with the session).
+
+**Never remembered** (always re-prompts): interactive root shells and
+cred-cache invocations (`sudo -s`/`-i`/`-v`, `su`), and arbitrary-code
+gateways used as the elevated command — shells, language interpreters,
+and common shell-escapers (editors, pagers, `find`, …). The denylist is
+conservative and non-exhaustive; the primary bound is full-command
+binding, so keep terminal windows short.
 
 A request with no audit session is never remembered. `sudo`'s own
 timestamp still covers terminal `sudo` independently of this setting.

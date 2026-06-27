@@ -81,38 +81,53 @@ impl PamHooks for PamSentinel {
         }
 
         // "Remember" window (root-owned timestamp store): a fresh grant
-        // for this (loginuid, session, service, exe) short-circuits to
-        // allow without a dialog. Bound to the login session so it can't
-        // be replayed elsewhere; see the `timestamp` module.
+        // for this (loginuid, session, service, FULL command) short-
+        // circuits to allow without a dialog. The grant binds to the
+        // whole elevated command — not just the program — and excludes
+        // bare-elevation root shells and arbitrary-code gateways, so a
+        // grant for `sudo pacman -Syu` can't auto-allow
+        // `sudo pacman -U /tmp/evil` (see `ProcessInfo::remember_command`).
+        // `None` means this request is not rememberable: skip the store
+        // entirely (always dialog, never record). Bound to the login
+        // session so it can't be replayed elsewhere; see `timestamp`.
         let ppid = unsafe { libc_getppid() };
-        let binding = timestamp::Binding {
-            loginuid: read_proc_u32(ppid, "loginuid"),
-            sessionid: read_proc_u32(ppid, "sessionid"),
-            service: &service,
-            exe: &process.exe,
-        };
-        if cfg.remember_seconds > 0 && timestamp::is_fresh(&binding, cfg.remember_seconds as u64) {
-            if cfg.log_attempts {
-                log::info!(
-                    "event=auth.allow source=remember user={} service={} process={} exe={} uid={}",
-                    q(&user),
-                    q(&service),
-                    q(&process.name),
-                    q(&process.exe),
-                    requesting_uid
-                );
+        let binding = process
+            .remember_command
+            .as_deref()
+            .map(|command| timestamp::Binding {
+                loginuid: read_proc_u32(ppid, "loginuid"),
+                sessionid: read_proc_u32(ppid, "sessionid"),
+                service: &service,
+                command,
+            });
+        if cfg.remember_seconds > 0 {
+            if let Some(b) = &binding {
+                if timestamp::is_fresh(b, cfg.remember_seconds as u64) {
+                    if cfg.log_attempts {
+                        log::info!(
+                            "event=auth.allow source=remember user={} service={} process={} exe={} uid={}",
+                            q(&user),
+                            q(&service),
+                            q(&process.name),
+                            q(&process.exe),
+                            requesting_uid
+                        );
+                    }
+                    return PamResultCode::PAM_SUCCESS;
+                }
             }
-            return PamResultCode::PAM_SUCCESS;
         }
 
         let (rc, remember) =
             spawn_dialog(&cfg, &service, &user, &process, process_pid, requesting_uid);
         // Record the grant only when the user ticked the "remember"
         // checkbox (the helper sets this on an opt-in Allow), not on every
-        // allow. `remember_seconds == 0` hides the checkbox, so this can't
-        // be true then.
+        // allow. `remember_seconds == 0` hides the checkbox, and a
+        // non-rememberable request has no binding, so neither can record.
         if remember && cfg.remember_seconds > 0 {
-            timestamp::record(&binding);
+            if let Some(b) = &binding {
+                timestamp::record(b);
+            }
         }
         rc
     }
@@ -213,8 +228,12 @@ fn handle_headless(cfg: &ServiceConfig, service: &str, user: &str) -> PamResultC
 }
 
 /// Static `[policy]` allow/deny, evaluated *before* spawning the dialog.
-/// Matches on the requesting binary's resolved exe path
-/// (`/proc/<pid>/exe`) — never the spoofable `argv[0]`. Returns
+/// Matches on `process.exe`: for a normal process that is the resolved
+/// `/proc/<pid>/exe`; for an elevation wrapper (`sudo CMD …`) it is the
+/// *elevated program* parsed from the wrapper's cmdline (e.g. `pacman`,
+/// not `/usr/bin/sudo`). Either way it is never the spoofable `argv[0]`.
+/// (So a `[policy]` entry for an elevated target should be the program
+/// **basename**, e.g. `pacman`, not an absolute path.) Returns
 /// `Some(rc)` to short-circuit, `None` to fall through to the dialog.
 ///
 /// An `allow` match is passwordless elevation (admin opt-in, like a

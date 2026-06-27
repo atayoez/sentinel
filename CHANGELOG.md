@@ -8,6 +8,19 @@ The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/), with version numbers
 following [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+- **Terminal remember grants now bind to the full command.** The
+  `sudo`/`su` remember record is keyed by the *whole* elevated command
+  (e.g. `pacman -Syu`), not just the program name, so a grant can no
+  longer authorize a different invocation of the same program — a grant
+  for `sudo pacman -Syu` will not auto-allow `sudo pacman -U /tmp/evil`.
+- **Arbitrary-code gateways are never remembered.** Bare-elevation root
+  shells / cred caches (`sudo -s`/`-i`/`-v`, `su`) and commands whose
+  target is a shell, language interpreter, or common shell-escaper
+  (editors, pagers, `find`, …) are excluded from the terminal remember
+  window — they always re-prompt. (Conservative, non-exhaustive denylist.)
+
 ## [0.11.1] — 2026-06-20
 
 Packaging hotfix for 0.11.0 — no runtime, config, or auth-path change.
