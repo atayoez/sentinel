@@ -10,8 +10,12 @@
 //! [`Instant`] clock, so it is immune to wall-clock manipulation, and the
 //! whole store evaporates when the broker stops (fail-closed: clients
 //! re-prompt).
+//!
+//! The API accepts only a [`BoundKey`] — a [`RememberKey`] proven bindable
+//! — so "act on an unbound grant" is unrepresentable (the check happens
+//! once, at the [`RememberKey::bind`] boundary in `dispatch`).
 
-use sentinel_broker_proto::{RememberKey, RememberQuery};
+use sentinel_broker_proto::{BoundKey, RememberKey};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -41,29 +45,25 @@ impl RememberStore {
         )
     }
 
-    /// True iff a non-expired grant exists for `q.key` within its (capped)
-    /// ttl. Unbindable keys and a zero ttl never match.
-    pub fn is_fresh(&self, q: &RememberQuery) -> bool {
-        if q.ttl_secs == 0 || !q.key.is_bindable() {
+    /// True iff a non-expired grant exists for `key` within its (capped)
+    /// ttl. A zero ttl never matches. Bindability is guaranteed by the
+    /// [`BoundKey`] type.
+    pub fn is_fresh(&self, key: &BoundKey, ttl_secs: u32) -> bool {
+        if ttl_secs == 0 {
             return false;
         }
-        let ttl = Duration::from_secs(q.ttl_secs as u64).min(MAX_REMEMBER);
+        let ttl = Duration::from_secs(ttl_secs as u64).min(MAX_REMEMBER);
         let map = self.inner.lock().expect("store mutex poisoned");
-        map.get(&Self::keystr(&q.key))
+        map.get(&Self::keystr(key.key()))
             .is_some_and(|t| t.elapsed() < ttl)
     }
 
-    /// Record/refresh a grant. Rejects unbindable keys (returns `false`).
-    /// Opportunistically prunes entries past the hard cap so the map can't
-    /// grow unbounded.
-    pub fn record(&self, key: &RememberKey) -> bool {
-        if !key.is_bindable() {
-            return false;
-        }
+    /// Record/refresh a grant. Opportunistically prunes entries past the
+    /// hard cap so the map can't grow unbounded.
+    pub fn record(&self, key: &BoundKey) {
         let mut map = self.inner.lock().expect("store mutex poisoned");
         map.retain(|_, t| t.elapsed() < MAX_REMEMBER);
-        map.insert(Self::keystr(key), Instant::now());
-        true
+        map.insert(Self::keystr(key.key()), Instant::now());
     }
 }
 
@@ -71,31 +71,26 @@ impl RememberStore {
 mod tests {
     use super::*;
 
-    fn key(cmd: &str) -> RememberKey {
+    fn bound(cmd: &str) -> BoundKey {
         RememberKey {
             loginuid: 1000,
             sessionid: 3,
             service: "sudo".into(),
             command: cmd.into(),
         }
-    }
-
-    fn query(cmd: &str, ttl: u32) -> RememberQuery {
-        RememberQuery {
-            key: key(cmd),
-            ttl_secs: ttl,
-        }
+        .bind()
+        .expect("test key is bindable")
     }
 
     #[test]
     fn record_then_fresh() {
         let s = RememberStore::new();
         assert!(
-            !s.is_fresh(&query("pacman -Syu", 60)),
+            !s.is_fresh(&bound("pacman -Syu"), 60),
             "nothing recorded yet"
         );
-        assert!(s.record(&key("pacman -Syu")));
-        assert!(s.is_fresh(&query("pacman -Syu", 60)));
+        s.record(&bound("pacman -Syu"));
+        assert!(s.is_fresh(&bound("pacman -Syu"), 60));
     }
 
     #[test]
@@ -103,41 +98,50 @@ mod tests {
         // The argv-binding guarantee at the broker layer: a different
         // command (same program) must not match.
         let s = RememberStore::new();
-        s.record(&key("pacman -Syu"));
-        assert!(!s.is_fresh(&query("pacman -U /tmp/evil", 60)));
+        s.record(&bound("pacman -Syu"));
+        assert!(!s.is_fresh(&bound("pacman -U /tmp/evil"), 60));
     }
 
     #[test]
     fn distinct_service_user_session_dont_match() {
         let s = RememberStore::new();
-        s.record(&key("pacman -Syu"));
-        let mut q = query("pacman -Syu", 60);
-        q.key.service = "su".into();
-        assert!(!s.is_fresh(&q));
-        let mut q = query("pacman -Syu", 60);
-        q.key.loginuid = 1001;
-        assert!(!s.is_fresh(&q));
-        let mut q = query("pacman -Syu", 60);
-        q.key.sessionid = 99;
-        assert!(!s.is_fresh(&q));
+        s.record(&bound("pacman -Syu"));
+        for mutate in [
+            |k: &mut RememberKey| k.service = "su".into(),
+            |k: &mut RememberKey| k.loginuid = 1001,
+            |k: &mut RememberKey| k.sessionid = 99,
+        ] {
+            let mut k = RememberKey {
+                loginuid: 1000,
+                sessionid: 3,
+                service: "sudo".into(),
+                command: "pacman -Syu".into(),
+            };
+            mutate(&mut k);
+            assert!(!s.is_fresh(&k.bind().unwrap(), 60));
+        }
     }
 
     #[test]
     fn zero_ttl_never_fresh() {
         let s = RememberStore::new();
-        s.record(&key("pacman -Syu"));
-        assert!(!s.is_fresh(&query("pacman -Syu", 0)));
+        s.record(&bound("pacman -Syu"));
+        assert!(!s.is_fresh(&bound("pacman -Syu"), 0));
     }
 
     #[test]
-    fn unbindable_is_rejected() {
-        let s = RememberStore::new();
-        let mut k = key("pacman -Syu");
-        k.loginuid = u32::MAX;
-        assert!(!s.record(&k), "unbindable key must not record");
-        assert!(!s.is_fresh(&RememberQuery {
-            key: k,
-            ttl_secs: 60
-        }));
+    fn unbound_keys_cannot_reach_the_store() {
+        // Type-state: an unbindable key yields None, so it can never be
+        // passed to record()/is_fresh() — the store only sees BoundKey.
+        let mut k = RememberKey {
+            loginuid: u32::MAX,
+            sessionid: 3,
+            service: "sudo".into(),
+            command: "pacman -Syu".into(),
+        };
+        assert!(k.clone().bind().is_none());
+        k.loginuid = 1000;
+        k.command.clear();
+        assert!(k.bind().is_none());
     }
 }

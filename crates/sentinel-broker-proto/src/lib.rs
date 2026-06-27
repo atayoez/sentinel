@@ -70,6 +70,29 @@ impl RememberKey {
     pub fn is_bindable(&self) -> bool {
         self.loginuid != u32::MAX && self.sessionid != u32::MAX && !self.command.is_empty()
     }
+
+    /// Consume into a [`BoundKey`] iff bindable. This is the single
+    /// validation boundary: everything downstream takes `BoundKey`, so an
+    /// unbound grant becomes *unrepresentable* rather than re-checked.
+    pub fn bind(self) -> Option<BoundKey> {
+        self.is_bindable().then_some(BoundKey(self))
+    }
+}
+
+/// A [`RememberKey`] proven bindable (tied to a real login session and a
+/// concrete command). The store accepts only `BoundKey`, so "act on an
+/// unbound grant" cannot compile — the runtime check happens once, at
+/// [`RememberKey::bind`], and the type then carries the proof. Not a wire
+/// type: it is only ever constructed locally from a deserialized
+/// [`RememberKey`].
+#[derive(Debug, Clone)]
+pub struct BoundKey(RememberKey);
+
+impl BoundKey {
+    /// The underlying validated key (for store keying / logging).
+    pub fn key(&self) -> &RememberKey {
+        &self.0
+    }
 }
 
 /// A freshness query: is there a live grant for `key` within `ttl_secs`?
@@ -244,5 +267,18 @@ mod tests {
         let mut k = key();
         k.command.clear();
         assert!(!k.is_bindable());
+    }
+
+    #[test]
+    fn bind_gates_construction() {
+        // The type-state boundary: a bindable key yields Some(BoundKey),
+        // an unbound one yields None (so the store can never see it).
+        assert!(key().bind().is_some());
+        let mut k = key();
+        k.sessionid = u32::MAX;
+        assert!(k.bind().is_none());
+        let mut k = key();
+        k.command.clear();
+        assert!(k.bind().is_none());
     }
 }

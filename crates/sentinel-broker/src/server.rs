@@ -63,21 +63,27 @@ fn peer_is_root(stream: &UnixStream) -> bool {
 }
 
 /// Pure request → response. Separated from I/O so it is trivially testable.
+/// The deserialized [`RememberKey`] is validated into a `BoundKey` here —
+/// the single boundary where an unbound grant is turned away — so the
+/// store only ever sees bindable keys.
 pub fn dispatch(req: Request, store: &RememberStore) -> Response {
     match req {
         Request::Ping => Response::Pong {
             protocol: PROTOCOL_VERSION,
         },
-        Request::CheckRemember(q) => Response::Remember {
-            fresh: store.is_fresh(&q),
-        },
-        Request::RecordRemember(key) => {
-            if store.record(&key) {
-                Response::Recorded
-            } else {
-                Response::Error("unbindable key".into())
+        Request::CheckRemember(q) => {
+            let ttl = q.ttl_secs;
+            Response::Remember {
+                fresh: q.key.bind().is_some_and(|k| store.is_fresh(&k, ttl)),
             }
         }
+        Request::RecordRemember(key) => match key.bind() {
+            Some(k) => {
+                store.record(&k);
+                Response::Recorded
+            }
+            None => Response::Error("unbindable key".into()),
+        },
     }
 }
 
