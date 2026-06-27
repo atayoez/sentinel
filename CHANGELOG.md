@@ -74,6 +74,18 @@ following [Semantic Versioning](https://semver.org/).
   means "show the dialog", never "let in". `install.sh`/`uninstall.sh`
   now deploy + enable (and tear down) the broker unit. This completes the
   privilege-separation split — the root PAM module holds no grant state.
+- **Fixed: remembered `pkexec` no longer blankets all pkexec.** The polkit
+  agent's remember cache keyed grants on `(action_id, exe)` — command-blind
+  — so since every `pkexec` shares `org.freedesktop.policykit.exec`, one
+  ticked "Remember" silently auto-allowed *any* later pkexec command (seen
+  in the wild as `source=remember action=…policykit.exec`). It now keys on
+  the **full elevated command**, so `pkexec true` only auto-allows
+  `pkexec true`, never `pkexec rm …`. The blanket pkexec carve-out is
+  dropped (pkexec is remembered per-command again), and the shell /
+  interpreter / shell-escaper exclusion denylist is now shared
+  (`sentinel_shared::remember_eligible_command`) so the polkit and PAM
+  paths apply the **same** rule. Both paths now bind remember to the whole
+  command.
 
 ## [0.11.1] — 2026-06-20
 

@@ -31,23 +31,6 @@ pub struct AuthInputs<'a> {
     pub requesting_user: Option<&'a str>,
 }
 
-/// The generic polkit action id for "run an arbitrary program as root".
-const GENERIC_EXEC_ACTION: &str = "org.freedesktop.policykit.exec";
-
-/// Whether a polkit action may participate in the "remember" window.
-///
-/// The remember cache keys grants on `(action_id, exe)` only — it does
-/// **not** include the command line ([`crate::remember`]). For the
-/// generic [`GENERIC_EXEC_ACTION`] (`pkexec` — run *any* command as
-/// root) that would let a single ticked grant auto-allow *any* later
-/// root command from the same caller within the window. So pkexec is
-/// excluded from remember entirely: no checkbox, no recording, no
-/// auto-allow. Specific actions (e.g. a package-install action) stay
-/// eligible — their action id already bounds what the grant covers.
-fn remember_eligible(action_id: &str) -> bool {
-    action_id != GENERIC_EXEC_ACTION
-}
-
 pub async fn run(
     queue: ApprovalQueue,
     remember: RememberCache,
@@ -120,12 +103,15 @@ pub async fn run(
         PolicyDecision::Ask => {}
     }
 
-    // Effective remember window for this request. The generic pkexec
-    // action is carved out (see `remember_eligible`) — for it this
-    // collapses to 0, which transitively disables the checkbox (passed
-    // to the helper below), the auto-allow short-circuit, and the
-    // recording on Allow.
-    let remember_secs = if remember_eligible(inputs.action_id) {
+    // Effective remember window for this request. The grant is keyed by
+    // the FULL elevated command, and shells / interpreters / arbitrary-
+    // code gateways are excluded (the denylist shared with the PAM path),
+    // so a remembered `pkexec true` can never auto-allow `pkexec rm` — no
+    // blanket pkexec carve-out needed. An ineligible or empty command
+    // collapses the window to 0, disabling the checkbox, the auto-allow,
+    // and the recording.
+    let remember_command = inputs.process_cmdline.unwrap_or_default();
+    let remember_secs = if sentinel_shared::remember_eligible_command(remember_command) {
         inputs.cfg.remember_seconds
     } else {
         0
@@ -133,10 +119,10 @@ pub async fn run(
 
     // In-memory "remember" cache (the polkit-path complement to the root
     // timestamp store, which the PAM module owns for sudo/su). A fresh
-    // grant for this (action, exe) auto-allows without a dialog.
+    // grant for this (action, full command) auto-allows without a dialog.
     if remember_secs > 0
         && remember
-            .is_fresh(inputs.action_id, inputs.process_exe, remember_secs)
+            .is_fresh(inputs.action_id, remember_command, remember_secs)
             .await
     {
         let process_name = inputs
@@ -241,13 +227,11 @@ pub async fn run(
         }
     }
 
-    // Record this Allow so repeat (action, exe) requests within the
-    // window skip the dialog — but only if the user ticked the
-    // "remember" checkbox (verdict.remember), not on every allow.
+    // Record this Allow so a repeat of the SAME (action, full command)
+    // within the window skips the dialog — but only if the user ticked
+    // the "remember" checkbox (verdict.remember), not on every allow.
     if verdict.remember && remember_secs > 0 {
-        remember
-            .remember(inputs.action_id, inputs.process_exe)
-            .await;
+        remember.remember(inputs.action_id, remember_command).await;
     }
 
     // Pre-approve before handing off to helper-1. helper-1 → PAM →
@@ -269,28 +253,4 @@ pub async fn run(
         );
     }
     Ok(success)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn generic_exec_action_is_not_remember_eligible() {
-        // pkexec / "run any command as root" must never be remembered:
-        // the (action_id, exe) key is command-blind, so one grant would
-        // blanket arbitrary later root commands from the same caller.
-        assert!(!remember_eligible(GENERIC_EXEC_ACTION));
-        assert!(!remember_eligible("org.freedesktop.policykit.exec"));
-    }
-
-    #[test]
-    fn specific_actions_are_remember_eligible() {
-        // Specific actions are bounded by their own id, so remembering
-        // them is appropriately scoped.
-        assert!(remember_eligible(
-            "org.freedesktop.packagekit.package-install"
-        ));
-        assert!(remember_eligible("org.freedesktop.systemd1.manage-units"));
-    }
 }

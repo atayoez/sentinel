@@ -145,7 +145,7 @@ async fn serialised_session_paths() {
         )
         .await;
         assert!(
-            !remember.is_fresh("a.rem", Some("/usr/bin/true"), 60).await,
+            !remember.is_fresh("a.rem", "true", 60).await,
             "plain ALLOW must NOT remember"
         );
 
@@ -157,28 +157,33 @@ async fn serialised_session_paths() {
         )
         .await;
         assert!(
-            remember.is_fresh("a.rem", Some("/usr/bin/true"), 60).await,
+            remember.is_fresh("a.rem", "true", 60).await,
             "ALLOW REMEMBER must record the grant"
         );
     }
 
-    // ---- pkexec carve-out: the generic exec action is never remembered ----
+    // ---- pkexec is remembered PER-COMMAND (not carved out, not blanket) ----
+    // The incident fix: a ticked `pkexec true` must auto-allow only
+    // `pkexec true`, never a different pkexec command.
     {
         let mut rcfg = cfg.clone();
         rcfg.remember_seconds = 60;
         let remember = RememberCache::new();
+        let exec = "org.freedesktop.policykit.exec";
         unsafe { std::env::set_var("SENTINEL_TEST_HELPER_OUTCOME", "ALLOW REMEMBER") };
         let _ = session::run(
             ApprovalQueue::new(),
             remember.clone(),
-            inputs("org.freedesktop.policykit.exec", "ck-px", &rcfg),
+            inputs(exec, "ck-px", &rcfg), // fixture cmdline = "true"
         )
         .await;
         assert!(
-            !remember
-                .is_fresh("org.freedesktop.policykit.exec", Some("/usr/bin/true"), 60)
-                .await,
-            "generic pkexec action must NOT be remembered even on ALLOW REMEMBER"
+            remember.is_fresh(exec, "true", 60).await,
+            "pkexec true was remembered → it should auto-allow pkexec true"
+        );
+        assert!(
+            !remember.is_fresh(exec, "rm -rf /", 60).await,
+            "a remembered pkexec command must NOT blanket other pkexec commands"
         );
     }
 

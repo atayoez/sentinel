@@ -705,6 +705,44 @@ pub fn process_basename(exe: &str) -> Option<&str> {
         .and_then(|s| s.to_str())
 }
 
+/// Programs whose whole job is to run *other* code as the elevated user —
+/// interactive shells, language interpreters, nested elevation wrappers,
+/// and common shell-escapers (editors / pagers / tools that can spawn a
+/// shell). Excluded from the "remember" window on **both** auth paths:
+/// even with full-command binding, a grant for one of them re-opens an
+/// arbitrary-code root session on a verbatim repeat (`pkexec bash` again,
+/// `sudo vim` then `:!sh`, …). Erring toward re-prompting is safe; the
+/// cost of over-excluding is just an extra dialog.
+///
+/// Deliberately conservative and **non-exhaustive** (a complete
+/// GTFOBins-style list is a policy concern). The primary bound is
+/// full-command binding; this closes the most obvious gateways on top.
+pub const REMEMBER_INELIGIBLE: &[&str] = &[
+    // shells
+    "sh", "bash", "dash", "zsh", "fish", "ksh", "tcsh", "csh", "ash", "busybox", //
+    // interpreters
+    "python", "python2", "python3", "perl", "ruby", "node", "nodejs", "lua", "php", "gdb", "tclsh",
+    "expect", //
+    // nested elevation / arg-runners
+    "su", "sudo", "sudo-rs", "doas", "pkexec", "run0", "env", //
+    // common shell-escapers (editors / pagers / tools)
+    "vi", "vim", "nvim", "view", "emacs", "nano", "less", "more", "man", "ed", "awk", "find",
+];
+
+/// Whether a full command is eligible for a "remember" grant. False when
+/// the leading program (by basename) is in [`REMEMBER_INELIGIBLE`], or the
+/// command is empty/whitespace. Shared by the polkit agent and the PAM
+/// module so both paths apply the *same* rule. The grant itself is keyed
+/// by the **full** command (args included) by each caller, so this only
+/// gates *which programs* may be remembered, not the granularity.
+pub fn remember_eligible_command(cmd: &str) -> bool {
+    let Some(first) = cmd.split_whitespace().next() else {
+        return false;
+    };
+    let base = process_basename(first).unwrap_or(first);
+    !REMEMBER_INELIGIBLE.contains(&base)
+}
+
 /// Generic shield icon shown when the requesting binary's basename has
 /// no icon-theme match. Present in every standard freedesktop theme
 /// (Breeze, Adwaita, Pop, …). Frontends use this as the fallback name.
@@ -1582,5 +1620,72 @@ mod tests {
     #[test]
     fn strip_elevation_empty_input() {
         assert_eq!(strip_elevation_prefix(""), "");
+    }
+
+    // ---- remember_eligible_command (shared by both auth paths) -----------
+
+    #[test]
+    fn remember_eligible_accepts_concrete_commands() {
+        assert!(remember_eligible_command("pacman -Syu"));
+        assert!(remember_eligible_command("systemctl restart nginx"));
+        assert!(remember_eligible_command("/usr/bin/pacman -Syu"));
+        assert!(remember_eligible_command("id"));
+        assert!(remember_eligible_command("cat /etc/hosts"));
+    }
+
+    #[test]
+    fn remember_eligible_rejects_shells_interpreters_nesting() {
+        for cmd in [
+            "bash",
+            "sh -c whoami",
+            "/usr/bin/zsh",
+            "fish",
+            "python3 -c x",
+            "perl -e x",
+            "node app.js",
+            "su",
+            "sudo bash",
+            "pkexec id",
+            "doas sh",
+            "env X=1 evil",
+        ] {
+            assert!(
+                !remember_eligible_command(cmd),
+                "{cmd:?} must be ineligible"
+            );
+        }
+    }
+
+    #[test]
+    fn remember_eligible_rejects_shell_escapers() {
+        for cmd in [
+            "vim /etc/hosts",
+            "less /var/log/x",
+            "man 5 sudoers",
+            "find / -exec sh ;",
+            "nano /etc/fstab",
+        ] {
+            assert!(
+                !remember_eligible_command(cmd),
+                "{cmd:?} must be ineligible"
+            );
+        }
+    }
+
+    #[test]
+    fn remember_eligible_rejects_empty() {
+        assert!(!remember_eligible_command(""));
+        assert!(!remember_eligible_command("   "));
+    }
+
+    #[test]
+    fn remember_eligible_matches_by_basename_not_substring() {
+        // Absolute path to a shell is still caught (basename match)…
+        assert!(!remember_eligible_command("/usr/bin/bash -l"));
+        // …but a program that merely *contains* a shell name is NOT
+        // falsely excluded (guards against substring over-matching).
+        assert!(remember_eligible_command("bashtop")); // != "bash"
+        assert!(remember_eligible_command("shellcheck x")); // != "sh"
+        assert!(remember_eligible_command("findutils-thing")); // != "find"
     }
 }
