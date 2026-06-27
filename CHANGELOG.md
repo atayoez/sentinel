@@ -95,6 +95,15 @@ following [Semantic Versioning](https://semver.org/).
   checkbox. (Compiled default for terminal stays `0`; the shipped config
   opts in. A remembered grant makes a repeat of the *same* command
   passwordless for the window — per-command, shell-excluded.)
+- **Installer disables sudo's own credential cache.** `sudo`'s
+  `timestamp_timeout` (~5 min) let a back-to-back `sudo` skip the PAM stack
+  entirely, so Sentinel never saw it and its per-command remember was
+  bypassed by sudo's *blanket* session cache. The KDE installer now drops
+  `/etc/sudoers.d/sentinel-timestamp` (`Defaults timestamp_timeout=0`,
+  validated with `visudo` before install, removed on uninstall) so every
+  `sudo` runs PAM and Sentinel's per-command window is the only cache.
+  Skipped with a warning (never a hard fail) if sudoers lacks an
+  `includedir`; `--no-sudo` opts out of terminal wiring and this override.
 
 ## [0.11.1] — 2026-06-20
 

@@ -131,6 +131,7 @@ FALLBACK_PATHS=(
     "$SYSCONFDIR/pam.d/sudo"
     "$SYSCONFDIR/pam.d/sudo-i"
     "$SYSCONFDIR/pam.d/su"
+    "$SYSCONFDIR/sudoers.d/sentinel-timestamp"
     "$SYSCONFDIR/polkit-1/rules.d/49-sentinel-admin.rules"
     "$PREFIX/share/dbus-1/system.d/org.sentinel.Agent.conf"
     "$PREFIX/lib/tmpfiles.d/sentinel.conf"

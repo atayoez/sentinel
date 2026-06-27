@@ -74,8 +74,17 @@ full-command binding, so keep terminal windows short.
 > short-circuits the stack before `pam_unix`). Enable the terminal window
 > only if you accept that trade-off.
 
-A request with no audit session is never remembered. `sudo`'s own
-timestamp still covers terminal `sudo` independently of this setting.
+A request with no audit session is never remembered.
+
+> **sudo's own timestamp.** By default `sudo` caches credentials for ~5 min
+> (`timestamp_timeout`), which lets a back-to-back `sudo` skip the PAM stack
+> entirely — so Sentinel never sees it and this per-command window is
+> bypassed by sudo's blanket session cache. The installer therefore drops
+> `/etc/sudoers.d/sentinel-timestamp` (`Defaults timestamp_timeout=0`,
+> validated with `visudo`) so **every** `sudo` runs the PAM stack and
+> Sentinel's per-command remember is the only cache. Remove that file (or
+> uninstall) to restore sudo's default timestamp; pass `--no-sudo` at
+> install time to skip terminal wiring (and this override) altogether.
 
 ### `[appearance]`
 

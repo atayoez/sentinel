@@ -318,14 +318,35 @@ else
     warn "will fall back to a password unless you add the rule yourself."
 fi
 
-# Optional: also guard terminal escalation (sudo / sudo -i / su). Same
-# prepend-in-place treatment so each keeps its real password fallback (and
-# su keeps pam_rootok, so root still su's without a prompt). Off by default
-# — turning sudo into click-to-allow removes its password barrier.
+# Also guard terminal escalation (sudo / sudo -i / su). Same prepend-in-place
+# treatment so each keeps its real password fallback (and su keeps pam_rootok,
+# so root still su's without a prompt). On by default; --no-sudo opts out.
 if [[ $INSTALL_SUDO -eq 1 ]]; then
     for svc in sudo sudo-i su; do
         wire_pam_service "$svc"
     done
+
+    # Make Sentinel the SINGLE source of sudo "remember". sudo's own
+    # credential cache (timestamp_timeout, ~5 min) lets a back-to-back
+    # `sudo` skip the PAM stack entirely — so Sentinel never sees it and our
+    # per-command window is bypassed by sudo's blanket session cache. Disable
+    # it so every sudo runs PAM; Sentinel's broker-backed, per-command
+    # remember is then the only layer. Reversible (removed on uninstall).
+    # Skipped — with a warning, never a hard fail — if sudoers doesn't
+    # includedir sudoers.d, visudo is missing, or the snippet won't validate.
+    if grep -qE '^[[:space:]]*[#@]includedir[[:space:]]+/etc/sudoers\.d' "$SYSCONFDIR/sudoers" 2>/dev/null; then
+        ts_tmp="$(mktemp)"
+        printf '# Installed by Sentinel — do not edit.\n# Disable sudo credential caching so every sudo runs the PAM stack and\n# Sentinel'\''s per-command remember is the only cache. Remove to restore\n# sudo'\''s default ~5-minute timestamp.\nDefaults timestamp_timeout=0\n' > "$ts_tmp"
+        if command -v visudo >/dev/null 2>&1 && visudo -cf "$ts_tmp" >/dev/null 2>&1; then
+            install_file 440 "$ts_tmp" "$SYSCONFDIR/sudoers.d/sentinel-timestamp"
+            step "Disabled sudo credential caching (Sentinel is now the only sudo remember)."
+        else
+            warn "sudoers snippet failed visudo validation — left sudo caching as-is."
+        fi
+        rm -f "$ts_tmp"
+    else
+        warn "/etc/sudoers does not includedir /etc/sudoers.d — skipped sudo timestamp override."
+    fi
 fi
 
 # Agent shell completions + man pages.
@@ -371,6 +392,10 @@ if [[ $INSTALL_SUDO -eq 1 ]]; then
     for svc in sudo sudo-i su; do
         [[ -f "$SYSCONFDIR/pam.d/$svc" ]] && verify "$SYSCONFDIR/pam.d/$svc" 644 regular
     done
+    # The sudo timestamp override is best-effort (skipped if sudoers lacks
+    # includedir); verify it only if it was actually installed.
+    [[ -f "$SYSCONFDIR/sudoers.d/sentinel-timestamp" ]] \
+        && verify "$SYSCONFDIR/sudoers.d/sentinel-timestamp" 440 regular
 fi
 
 systemctl daemon-reload 2>/dev/null || true
