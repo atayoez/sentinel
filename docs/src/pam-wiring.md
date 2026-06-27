@@ -112,8 +112,12 @@ single click instead of a password.
 enabled for a service (`[services.<name>].remember_seconds`), a *fresh*
 matching grant auto-allows with **no dialog** — and under `sufficient`,
 **no password** — for the window's duration, relaxing the per-request
-click above. Terminal services (`sudo`/`su`) are **off by default**, so
-the shipped wiring keeps the "adds a click, never weakens" invariant
-unless you opt a service in. The polkit/GUI remember default (on) is a
-per-session, in-memory cache and does not touch this terminal stack.
+click above. The shipped config opts terminal `sudo`/`su`/`sudo-i` into a
+**per-command** window (the *compiled* default is still `0`), so a verbatim
+repeat of the same command can auto-allow; set
+`[services.<name>].remember_seconds = 0` to keep the strict "adds a click,
+never weakens" behavior for that service. The installer also disables
+`sudo`'s own credential cache so this window is the only one. The
+polkit/GUI remember default (on) is a per-session, in-memory cache and does
+not touch this terminal stack.
 See [Configuration → remember window](./configuration.md#remember-window).

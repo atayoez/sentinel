@@ -10,32 +10,44 @@ following [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-- **Remember checkbox shown by default (polkit/GUI).** `[general].remember_seconds`
+## [0.12.0] — 2026-06-27
+
+Privilege-separation broker, a reworked per-command "remember" model, and
+a tighter root `unsafe` surface.
+
+### Remember window
+
+- **Checkbox shown by default (polkit/GUI).** `[general].remember_seconds`
   now defaults to `300` (was `0`), so the polkit auth dialog shows the
   opt-in "Remember" checkbox on every prompt. The box still defaults
   unchecked — nothing is auto-allowed unless you tick it per prompt. Set
   `[general].remember_seconds = 0` to hide it / disable. (#22)
-- **Terminal `sudo`/`su` remember stays off by default.** The remember
-  window is now a per-service knob: terminal paths default to `0`
-  regardless of `[general]` and must opt in via the new
-  `[services.<name>].remember_seconds` override. This keeps the
-  root-owned terminal timestamp store off by default while the in-memory
-  GUI cache defaults on. Unknown `[services.*]` keys are now a parse
-  error (`deny_unknown_fields`) so a typo'd security knob fails loudly.
-- **Generic pkexec action excluded from remember.**
-  `org.freedesktop.policykit.exec` ("run any command as root") is never
-  remembered — its grant key omits the command line, so a single tick
-  must not blanket unrelated root commands.
-- **Terminal remember grants bind to the full command.** When a terminal
-  service is opted in, the `sudo`/`su` remember record is keyed by the
-  *whole* elevated command (e.g. `pacman -Syu`), not just the program
-  name, so a grant can no longer authorize a different invocation — a
-  grant for `sudo pacman -Syu` will not auto-allow `sudo pacman -U /tmp/evil`.
-- **Arbitrary-code gateways are never remembered.** Bare-elevation root
-  shells / cred caches (`sudo -s`/`-i`/`-v`, `su`) and commands whose
-  target is a shell, language interpreter, or common shell-escaper
-  (editors, pagers, `find`, …) are excluded from the terminal remember
-  window — they always re-prompt. (Conservative, non-exhaustive denylist.)
+- **Grants bind to the full command — on both paths.** The remember record
+  is keyed by the *whole* elevated command, not the program name, so a
+  grant can never authorize a different invocation: `sudo pacman -Syu` will
+  not auto-allow `sudo pacman -U /tmp/evil`, and `pkexec id` never covers
+  `pkexec rm`. This fixes a real bug where the polkit path's command-blind
+  key let one ticked `pkexec` silently auto-allow *any* later pkexec
+  command (seen in the wild as `source=remember action=…policykit.exec`);
+  `pkexec` is now remembered per command like everything else, with no
+  blanket carve-out.
+- **Per-service window; shipped config enables terminal.** Remember is a
+  per-service knob (`[services.<name>].remember_seconds`). The *compiled*
+  default is `300` for `polkit-1` and `0` for terminal services, but the
+  shipped `config/sentinel.conf` opts `sudo`/`sudo-i`/`su` into `300` (set
+  a service to `0` to require confirmation every time). Unknown
+  `[services.*]` keys are now a parse error (`deny_unknown_fields`) so a
+  typo'd security knob fails loudly.
+- **Arbitrary-code gateways are never remembered (both paths).** Commands
+  whose target is a shell, language interpreter, or common shell-escaper
+  (editors, pagers, `find`, …) — plus bare-elevation root shells / cred
+  caches (`sudo -s`/`-i`/`-v`, `su`) on the terminal path — always
+  re-prompt, via a shared denylist
+  (`sentinel_shared::remember_eligible_command`). Conservative,
+  non-exhaustive; the primary bound is full-command binding.
+
+### Hardening
+
 - **Hardened the PAM module's `unsafe` surface.** `pam-sentinel` (root
   code) is now `#![deny(unsafe_code)]`. The hand-rolled `extern "C"`
   `getpid`/`getppid`/`getuid` shims are replaced with safe `nix`
@@ -50,13 +62,16 @@ following [Semantic Versioning](https://semver.org/).
   `format_message` (`%`-token substitution). A `fuzz` CI workflow
   smoke-fuzzes each target 60 s per push (5 min weekly). No crashes found
   in initial runs (~2.2M/660K/980K execs).
-- **Privilege-separation broker — typed IPC protocol (foundation).** New
+
+### Privilege-separation broker
+
+- **Typed IPC protocol.** New
   `sentinel-broker-proto` crate: the `#![forbid(unsafe_code)]` wire
   contract for a future thin PAM shim → sandboxed root broker
   (`pam_sss`/OpenSSH-monitor model). Compact `postcard` messages with a
   length-prefixed, `MAX_FRAME_LEN`-bounded codec (no OOM on a hostile
   length), fail-closed semantics, and a `broker_proto` fuzz target.
-- **Privilege-separation broker — daemon (`sentinel-broker`).** The
+- **Daemon (`sentinel-broker`).** The
   remember decision + grant store now have a home outside the privileged
   binary: a long-lived, **unprivileged** daemon (systemd `DynamicUser=`)
   serving root-only peers over a Unix socket (`SO_PEERCRED` uid-0 gate),
@@ -66,7 +81,7 @@ following [Semantic Versioning](https://semver.org/).
   to forge or roll back, monotonic-clock freshness, grants evaporate on
   stop. Keyed by the full command (the argv-binding guarantee holds here
   too).
-- **Privilege-separation broker — PAM shim rewire.** `pam_sentinel` no
+- **PAM shim rewire.** `pam_sentinel` no
   longer keeps a root timestamp store of its own: it now **relays** the
   remember decision to `sentinel-broker` over the Unix socket
   (`broker_client`), and the on-disk `/run/sentinel/ts` store
@@ -74,18 +89,8 @@ following [Semantic Versioning](https://semver.org/).
   means "show the dialog", never "let in". `install.sh`/`uninstall.sh`
   now deploy + enable (and tear down) the broker unit. This completes the
   privilege-separation split — the root PAM module holds no grant state.
-- **Fixed: remembered `pkexec` no longer blankets all pkexec.** The polkit
-  agent's remember cache keyed grants on `(action_id, exe)` — command-blind
-  — so since every `pkexec` shares `org.freedesktop.policykit.exec`, one
-  ticked "Remember" silently auto-allowed *any* later pkexec command (seen
-  in the wild as `source=remember action=…policykit.exec`). It now keys on
-  the **full elevated command**, so `pkexec true` only auto-allows
-  `pkexec true`, never `pkexec rm …`. The blanket pkexec carve-out is
-  dropped (pkexec is remembered per-command again), and the shell /
-  interpreter / shell-escaper exclusion denylist is now shared
-  (`sentinel_shared::remember_eligible_command`) so the polkit and PAM
-  paths apply the **same** rule. Both paths now bind remember to the whole
-  command.
+### Installer
+
 - **KDE installer ships the broker; terminal remember enabled.** The KDE
   installer (`packaging-kde/install.sh`) now builds, installs, and enables
   `sentinel-broker` (the missing piece that backs terminal remember), and

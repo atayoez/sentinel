@@ -19,7 +19,7 @@ own `timeout` to zero.
 | `show_process_info` | bool | `true` | Display the requesting process's exe/cmdline in the dialog. |
 | `log_attempts` | bool | `true` | Log every allow/deny/timeout to syslog (`auth.info`). |
 | `min_display_time_ms` | uint | `500` | Disable the Allow button for this many ms after the dialog appears, blocking instant scripted clicks. |
-| `remember_seconds` | uint | `300` | "Remember" window for the **polkit/GUI path**. The dialog shows a **"Remember for N min" checkbox** by default; tick it and Allow to let repeat requests from the **same login session** skip the dialog for this many seconds (GUI keys on the polkit `action` + binary; terminal keys on the **full command**). `0` hides the checkbox (feature off on the GUI path); hard-capped at `900`. **Terminal `sudo`/`su` are off by default** — opt in per-service via `[services.<name>].remember_seconds`. See [below](#remember-window). |
+| `remember_seconds` | uint | `300` | "Remember" window for the **polkit/GUI path**. The dialog shows a **"Remember for N min" checkbox** by default; tick it and Allow to let repeat requests from the **same login session** skip the dialog for this many seconds. **Both paths key the grant on the `action`/service + the full command**, so it never covers a different command. `0` hides the checkbox; hard-capped at `900`. Terminal `sudo`/`su` have a *compiled* default of `0`, but the **shipped config opts them into `300`**. See [below](#remember-window). |
 
 <a id="remember-window"></a>
 **The remember window** is a `sudo`-timestamp analogue. The opt-in
@@ -28,10 +28,10 @@ checkbox is **shown by default on the polkit/GUI path** (set
 request** (the box defaults unchecked, so nothing is auto-allowed unless
 you tick it on that prompt). A grant is bound to your `loginuid` **and**
 kernel audit `sessionid`, so it can't be replayed in another session or
-by another user, and is scoped to exactly what it was granted for — the
-GUI path keys on `(action, binary)`, and the terminal path keys on the
-**whole command** (`sudo pacman -Syu` can never auto-allow
-`sudo pacman -U /tmp/evil`) — never a blanket allow. It is enforced by
+by another user, and is scoped to exactly what it was granted for —
+**both paths key the grant on `(action, whole command)`** (`sudo pacman
+-Syu` can never auto-allow `sudo pacman -U /tmp/evil`, and `pkexec id`
+never covers `pkexec rm`) — never a blanket allow. It is enforced by
 two trust-appropriate backends:
 
 - **sudo / su** (PAM path): the `pam_sentinel` module relays the decision
@@ -44,27 +44,37 @@ two trust-appropriate backends:
 - **polkit / GUI** (agent, per-user): an in-memory cache that evaporates
   on logout (the agent restarts with the session).
 
-**GUI on, terminal off by default.** Because the two paths have very
-different blast radii, the default is split:
+**Defaults.** The two paths have different blast radii, so the *compiled*
+defaults differ — but the shipped config enables both:
 
 - The **polkit/GUI** path inherits `[general].remember_seconds` (default
   `300`), so the checkbox is shown there by default.
-- The **terminal** `sudo`/`su`/`sudo-i` paths default to **`0` (off)**
-  regardless of `[general]`. Enable one explicitly with, e.g.,
-  `[services.sudo]\nremember_seconds = 300`. Disable the GUI path with
-  `[general].remember_seconds = 0` or `[services."polkit-1"].remember_seconds = 0`.
+- The **terminal** `sudo`/`su`/`sudo-i` paths have a *compiled* default of
+  **`0` (off)**, but the shipped `config/sentinel.conf` opts them into
+  `300`. Set a service back to `0` to require confirmation every time;
+  disable the GUI path with `[general].remember_seconds = 0` or
+  `[services."polkit-1"].remember_seconds = 0`.
 
-The generic pkexec action (`org.freedesktop.policykit.exec`, "run any
-command as root") is **never** remembered: its grant key omits the
-command line, so one tick would otherwise blanket unrelated root
-commands.
+Because grants are keyed by the **full command**, the generic pkexec
+action (`org.freedesktop.policykit.exec`, "run any command as root") is
+remembered **per command** — `pkexec id` only ever auto-allows
+`pkexec id`, never `pkexec rm …`. (Earlier versions excluded pkexec
+entirely because the key was command-blind; that is fixed.)
 
-**Never remembered** (always re-prompts) on the terminal path:
+> **polkit's own caching is separate.** Actions whose policy uses
+> `auth_admin_keep`/`auth_self_keep` are cached by **polkit itself** for
+> the session after the first auth — independent of Sentinel's window, and
+> not overridden by Sentinel. The first auth is still gated by the dialog;
+> `pkexec` does **not** use `keep`, so the "run anything" path is
+> re-confirmed every time.
+
+**Never remembered** (always re-prompts), on **both** paths: arbitrary-code
+gateways used as the elevated command — shells, language interpreters, and
+common shell-escapers (editors, pagers, `find`, …), via a shared denylist
+(`sentinel_shared::remember_eligible_command`); plus, on the terminal path,
 interactive root shells and cred-cache invocations (`sudo -s`/`-i`/`-v`,
-`su`), and arbitrary-code gateways used as the elevated command — shells,
-language interpreters, and common shell-escapers (editors, pagers,
-`find`, …). Conservative, non-exhaustive denylist; the primary bound is
-full-command binding, so keep terminal windows short.
+`su`). Conservative, non-exhaustive; the primary bound is full-command
+binding, so keep windows short.
 
 > ⚠️ **Terminal caveat.** A `sudo`/`su` grant is keyed by the **full
 > command** (so a grant for `sudo pacman -Syu` does *not* cover
@@ -118,7 +128,7 @@ timeout = 60          # more lenient for GUI auth
 enabled = false       # never confirm `su`, fall through to password
 
 [services.sudo]
-remember_seconds = 300  # opt sudo into a 5-min window (off by default)
+remember_seconds = 300  # per-command 5-min window; set 0 to confirm every time
 ```
 
 ### `[policy]`
@@ -216,7 +226,7 @@ on_timeout = false
 
 [services.sudo]
 timeout = 30
-# remember_seconds = 300      # uncomment to opt sudo in (off by default)
+remember_seconds = 300        # per-command window (shipped default); 0 = confirm every time
 
 [services."polkit-1"]
 timeout = 60
