@@ -94,7 +94,7 @@
 
           meta = with pkgs.lib; {
             description = "UAC-style confirmation dialog for Linux privilege escalation";
-            homepage = "https://github.com/atayozcan/sentinel";
+            homepage = "https://github.com/atayoez/sentinel";
             license = licenses.gpl3Plus;
             platforms = platforms.linux;
           };

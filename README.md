@@ -1,9 +1,9 @@
 # Sentinel
 
-[![CI](https://github.com/atayozcan/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/atayozcan/sentinel/actions/workflows/ci.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/atayozcan/sentinel/badge)](https://scorecard.dev/viewer/?uri=github.com/atayozcan/sentinel)
-[![REUSE compliant](https://api.reuse.software/badge/github.com/atayozcan/sentinel)](https://api.reuse.software/info/github.com/atayozcan/sentinel)
-[![Latest release](https://img.shields.io/github/v/release/atayozcan/sentinel?include_prereleases&sort=semver)](https://github.com/atayozcan/sentinel/releases/latest)
+[![CI](https://github.com/atayoez/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/atayoez/sentinel/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/atayoez/sentinel/badge)](https://scorecard.dev/viewer/?uri=github.com/atayoez/sentinel)
+[![REUSE compliant](https://api.reuse.software/badge/github.com/atayoez/sentinel)](https://api.reuse.software/info/github.com/atayoez/sentinel)
+[![Latest release](https://img.shields.io/github/v/release/atayoez/sentinel?include_prereleases&sort=semver)](https://github.com/atayoez/sentinel/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-blue.svg)](rust-toolchain.toml)
 
@@ -14,7 +14,7 @@ desktop frontend. Wayland-only, `sudo-rs` friendly.
 > [!CAUTION]
 > Sentinel sits in the **PAM authentication path**. A misconfiguration
 > can lock you out of `sudo`, polkit, or login. Read the
-> [Troubleshooting](https://atayozcan.github.io/sentinel/troubleshooting.html)
+> [Troubleshooting](https://atayoez.github.io/sentinel/troubleshooting.html)
 > page **before** you install. Open a second root shell during the
 > first install (`pkexec bash`) and keep it open until you've verified
 > `sudo` still works.
@@ -26,17 +26,17 @@ desktop frontend. Wayland-only, `sudo-rs` friendly.
 
 ## Documentation
 
-Full docs live at **<https://atayozcan.github.io/sentinel/>** (built
+Full docs live at **<https://atayoez.github.io/sentinel/>** (built
 from `docs/` via mdBook, deployed by `.github/workflows/docs.yml`):
 
-- [Installation](https://atayozcan.github.io/sentinel/installation.html) — AUR, NixOS, generic tarball, source
-- [Configuration](https://atayozcan.github.io/sentinel/configuration.html) — `/etc/security/sentinel.conf` reference
-- [PAM wiring](https://atayozcan.github.io/sentinel/pam-wiring.html) — `sudo`, `polkit`, `su`
-- [Building from source](https://atayozcan.github.io/sentinel/building-from-source.html)
-- [Architecture](https://atayozcan.github.io/sentinel/architecture.html) — design and security model
-- [Troubleshooting](https://atayozcan.github.io/sentinel/troubleshooting.html) — recovery, common failures, debug logging
-- [Contributing](https://atayozcan.github.io/sentinel/contributing.html)
-- [Security policy](https://atayozcan.github.io/sentinel/security.html)
+- [Installation](https://atayoez.github.io/sentinel/installation.html) — AUR, NixOS, generic tarball, source
+- [Configuration](https://atayoez.github.io/sentinel/configuration.html) — `/etc/security/sentinel.conf` reference
+- [PAM wiring](https://atayoez.github.io/sentinel/pam-wiring.html) — `sudo`, `polkit`, `su`
+- [Building from source](https://atayoez.github.io/sentinel/building-from-source.html)
+- [Architecture](https://atayoez.github.io/sentinel/architecture.html) — design and security model
+- [Troubleshooting](https://atayoez.github.io/sentinel/troubleshooting.html) — recovery, common failures, debug logging
+- [Contributing](https://atayoez.github.io/sentinel/contributing.html)
+- [Security policy](https://atayoez.github.io/sentinel/security.html)
 
 ## Quick install
 
@@ -48,15 +48,15 @@ Plasma confirmation dialog.
 yay -S sentinel-kde        # KDE Plasma (Kirigami dialog)
 
 # NixOS — flake at the repo root
-nix run github:atayozcan/sentinel -- --timeout 10 --randomize
+nix run github:atayoez/sentinel -- --timeout 10 --randomize
 
 # From source
-git clone https://github.com/atayozcan/sentinel
+git clone https://github.com/atayoez/sentinel
 cd sentinel
 pkexec ./packaging-kde/install.sh
 ```
 
-See [Installation](https://atayozcan.github.io/sentinel/installation.html)
+See [Installation](https://atayoez.github.io/sentinel/installation.html)
 for full instructions, including the prebuilt binary tarball and
 per-distro details. The prebuilt bundle is published per release as
 `sentinel-kde-<ver>-<arch>-linux.tar.gz`.

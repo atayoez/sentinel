@@ -26,7 +26,7 @@ The repo's `flake.nix` exposes a NixOS module:
 
 ```nix
 {
-  inputs.sentinel.url = "github:atayozcan/sentinel";
+  inputs.sentinel.url = "github:atayoez/sentinel";
 
   outputs = { self, nixpkgs, sentinel, ... }: {
     nixosConfigurations.<host> = nixpkgs.lib.nixosSystem {
@@ -45,7 +45,7 @@ The repo's `flake.nix` exposes a NixOS module:
 Or run the helper ad-hoc without installing:
 
 ```bash
-nix run github:atayozcan/sentinel -- --timeout 10 --randomize
+nix run github:atayoez/sentinel -- --timeout 10 --randomize
 ```
 
 ## Generic binary tarball
@@ -55,7 +55,7 @@ Each release publishes a prebuilt bundle per arch,
 `install.sh` with `SENTINEL_SKIP_BUILD=1` — no toolchain needed.
 
 ```bash
-curl -LO https://github.com/atayozcan/sentinel/releases/latest/download/sentinel-kde-0.9.0-x86_64-linux.tar.gz
+curl -LO https://github.com/atayoez/sentinel/releases/latest/download/sentinel-kde-0.9.0-x86_64-linux.tar.gz
 tar xzf sentinel-kde-0.9.0-x86_64-linux.tar.gz
 cd sentinel-kde-0.9.0
 sudo SENTINEL_SKIP_BUILD=1 ./install.sh
@@ -67,7 +67,7 @@ The KDE frontend installs from `packaging-kde/`, pulling in the shared
 backend.
 
 ```bash
-git clone https://github.com/atayozcan/sentinel
+git clone https://github.com/atayoez/sentinel
 cd sentinel
 pkexec ./packaging-kde/install.sh
 ```
@@ -95,7 +95,7 @@ attestations:
 
 ```bash
 gh attestation verify sentinel-kde-0.9.0-x86_64-linux.tar.gz \
-    --repo atayozcan/sentinel
+    --repo atayoez/sentinel
 ```
 
 The signature binds the file's sha256 to the release.yml workflow

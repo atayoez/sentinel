@@ -7,7 +7,7 @@ flow itself is normal GitHub fork-PR-merge.
 ## Development quickstart
 
 ```bash
-git clone https://github.com/atayozcan/sentinel
+git clone https://github.com/atayoez/sentinel
 cd sentinel
 
 cargo build --release --workspace
@@ -18,7 +18,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Things reviewers check
 
-The [PR template](https://github.com/atayozcan/sentinel/blob/main/.github/pull_request_template.md)
+The [PR template](https://github.com/atayoez/sentinel/blob/main/.github/pull_request_template.md)
 lists the gate. Most-important items:
 
 - **Sentinel sits in the PAM auth path.** If you touch
@@ -45,8 +45,8 @@ lists the gate. Most-important items:
 
 ## Reporting bugs
 
-Use [bug_report.yml](https://github.com/atayozcan/sentinel/issues/new?template=bug_report.yml)
-for general bugs, or [compositor_compat.yml](https://github.com/atayozcan/sentinel/issues/new?template=compositor_compat.yml)
+Use [bug_report.yml](https://github.com/atayoez/sentinel/issues/new?template=bug_report.yml)
+for general bugs, or [compositor_compat.yml](https://github.com/atayoez/sentinel/issues/new?template=compositor_compat.yml)
 for "did Sentinel work on $compositor" reports (the table in the
 README is fed from these).
 
@@ -56,12 +56,12 @@ see the [security policy](./security.md).
 ## Discussions
 
 Open-ended questions ("would you take a PR for X?", "is this in
-scope?") go in [Discussions](https://github.com/atayozcan/sentinel/discussions)
+scope?") go in [Discussions](https://github.com/atayoez/sentinel/discussions)
 rather than issues.
 
 ## License
 
 By contributing you agree your changes ship under
-[GPL-3.0-or-later](https://github.com/atayozcan/sentinel/blob/main/LICENSE),
+[GPL-3.0-or-later](https://github.com/atayoez/sentinel/blob/main/LICENSE),
 Sentinel's license. New files should carry the SPDX header
 (see existing files for the convention; `reuse lint` enforces).

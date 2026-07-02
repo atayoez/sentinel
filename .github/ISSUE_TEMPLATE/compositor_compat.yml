@@ -7,13 +7,13 @@ body:
     attributes:
       value: |
         Thanks for testing Sentinel on your compositor! This template
-        feeds the [Compatibility table](https://github.com/atayozcan/sentinel#compatibility)
+        feeds the [Compatibility table](https://github.com/atayoez/sentinel#compatibility)
         in the README. Both *worked* and *didn't work* reports are
         useful — the table tracks both.
 
         **Not a compatibility report?** Use the regular
-        [bug report](https://github.com/atayozcan/sentinel/issues/new?template=bug_report.yml)
-        or [feature request](https://github.com/atayozcan/sentinel/issues/new?template=feature_request.yml)
+        [bug report](https://github.com/atayoez/sentinel/issues/new?template=bug_report.yml)
+        or [feature request](https://github.com/atayoez/sentinel/issues/new?template=feature_request.yml)
         templates instead.
 
   - type: dropdown

@@ -14,7 +14,7 @@ install=sentinel-kde.install
 options=('!debug' '!strip')   # binaries are already stripped at link time
 pkgdesc="UAC-style confirmation dialog for privilege escalation on KDE Plasma (Wayland)"
 arch=('x86_64' 'aarch64')
-url="https://github.com/atayozcan/sentinel"
+url="https://github.com/atayoez/sentinel"
 license=('GPL-3.0-or-later')
 depends=(
     'pam'

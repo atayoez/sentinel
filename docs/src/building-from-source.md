@@ -20,7 +20,7 @@ The backend (PAM module + agent) is in `default-members`, so a bare
 build skips both GUI toolchains. Build a frontend explicitly.
 
 ```bash
-git clone https://github.com/atayozcan/sentinel
+git clone https://github.com/atayoez/sentinel
 cd sentinel
 
 cargo build --release --locked                          # backend only (no Qt)

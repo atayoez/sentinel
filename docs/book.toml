@@ -8,9 +8,9 @@ src = "src"
 [output.html]
 default-theme = "navy"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/atayozcan/sentinel"
+git-repository-url = "https://github.com/atayoez/sentinel"
 git-repository-icon = "fa-github"
-edit-url-template = "https://github.com/atayozcan/sentinel/edit/main/docs/{path}"
+edit-url-template = "https://github.com/atayoez/sentinel/edit/main/docs/{path}"
 site-url = "/sentinel/"
 no-section-label = false
 

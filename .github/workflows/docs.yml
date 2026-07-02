@@ -4,7 +4,7 @@ name: docs
 # push to main. Manual dispatch is also exposed for a one-off
 # rebuild after a wiki migration / typo fix.
 #
-# Site URL: https://atayozcan.github.io/sentinel/
+# Site URL: https://atayoez.github.io/sentinel/
 # Source: docs/src/*.md, configured by docs/book.toml
 
 on:

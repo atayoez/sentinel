@@ -162,7 +162,7 @@ agent → pam_sentinel:  true    (approval popped, fast-path the auth)
 
 ## Compatibility matrix
 
-See [README#Compatibility](https://github.com/atayozcan/sentinel#compatibility)
+See [README#Compatibility](https://github.com/atayoez/sentinel#compatibility)
 for the per-compositor status table.
 
 ## Threat model
