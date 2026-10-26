@@ -227,12 +227,17 @@ Item {
                     highlighted: true
                     Layout.fillWidth: true
                     onClicked: ctrl.allow()
+                    Keys.onReturnPressed: clicked()
+                    Keys.onEnterPressed: clicked()
                 }
                 QQC2.Button {
                     text: ctrl.translate("deny")
                     icon.name: "dialog-cancel"
+                    focus: true
                     Layout.fillWidth: true
                     onClicked: ctrl.deny()
+                    Keys.onReturnPressed: clicked()
+                    Keys.onEnterPressed: clicked()
                     // Destructive tint (sourced from rootItem to avoid a
                     // self-referential binding loop — see destructiveColor).
                     Kirigami.Theme.inherit: false
