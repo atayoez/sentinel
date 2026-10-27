@@ -8,6 +8,13 @@ The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/), with version numbers
 following [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Easier keyboard navigation in confirmation dialogs**, with Deny
+  selected by default.
+
 ## [0.14.0] — 2026-07-05
 
 ### Fixed
