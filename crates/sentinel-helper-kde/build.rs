@@ -26,7 +26,13 @@ fn main() {
     // cxx-qt-build doesn't reliably emit rerun-if-changed for the QML, so a
     // bare `.qml` edit wouldn't re-embed the qrc — you'd ship stale UI.
     // Declare them explicitly so editing a dialog file triggers a rebuild.
-    for f in ["Main", "Windowed", "DialogCard", "DetailRow"] {
+    for f in [
+        "Main",
+        "Windowed",
+        "DialogCard",
+        "DetailRow",
+        "VerdictButton",
+    ] {
         println!("cargo:rerun-if-changed=qml/{f}.qml");
     }
 
@@ -39,6 +45,7 @@ fn main() {
             "qml/Windowed.qml",
             "qml/DialogCard.qml",
             "qml/DetailRow.qml",
+            "qml/VerdictButton.qml",
         ]),
     )
     // Qt Core is always linked; Gui/Qml come via cxx-qt-lib, but we name

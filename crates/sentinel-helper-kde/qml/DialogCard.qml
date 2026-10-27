@@ -220,7 +220,7 @@ Item {
                 spacing: Kirigami.Units.largeSpacing
                 layoutDirection: ctrl.allowFirst ? Qt.LeftToRight : Qt.RightToLeft
 
-                QQC2.Button {
+                VerdictButton {
                     id: allowButton
                     text: ctrl.translate("allow")
                     icon.name: "dialog-ok"
@@ -233,7 +233,7 @@ Item {
                     Keys.onReturnPressed: clicked()
                     Keys.onEnterPressed: clicked()
                 }
-                QQC2.Button {
+                VerdictButton {
                     id: denyButton
                     text: ctrl.translate("deny")
                     icon.name: "dialog-cancel"
