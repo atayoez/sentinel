@@ -220,19 +220,30 @@ Item {
                 spacing: Kirigami.Units.largeSpacing
                 layoutDirection: ctrl.allowFirst ? Qt.LeftToRight : Qt.RightToLeft
 
-                QQC2.Button {
+                VerdictButton {
+                    id: allowButton
                     text: ctrl.translate("allow")
                     icon.name: "dialog-ok"
                     enabled: ctrl.allowEnabled
-                    highlighted: true
                     Layout.fillWidth: true
+                    // Keep horizontal navigation within the verdict buttons.
+                    KeyNavigation.left: denyButton
+                    KeyNavigation.right: denyButton
                     onClicked: ctrl.allow()
+                    Keys.onReturnPressed: clicked()
+                    Keys.onEnterPressed: clicked()
                 }
-                QQC2.Button {
+                VerdictButton {
+                    id: denyButton
                     text: ctrl.translate("deny")
                     icon.name: "dialog-cancel"
+                    focus: true
                     Layout.fillWidth: true
+                    KeyNavigation.left: allowButton
+                    KeyNavigation.right: allowButton
                     onClicked: ctrl.deny()
+                    Keys.onReturnPressed: clicked()
+                    Keys.onEnterPressed: clicked()
                     // Destructive tint (sourced from rootItem to avoid a
                     // self-referential binding loop — see destructiveColor).
                     Kirigami.Theme.inherit: false
